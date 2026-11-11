@@ -264,11 +264,11 @@ export class House extends DurableObject {
       q.team = to;
       this.log('vip', q.name, `devient ⭐ VIP et ouvre son salon privé 🔒 ${t.name}`);
       this.announce(`⭐ **${q.name}** devient VIP et ouvre son salon privé **${t.name}** ! Les VIP peuvent recruter leur équipe dans Discolife.`);
-      await this.syncTeamCreate(t);
+      await this.syncTeamCreate(t); this.vipRole(to, true);
     } else {
       const t = T[to]; if (!t) return;
       for (const id of t.members) { const x = this.profiles[id]; if (x) { x.team = null; this.pushProf(x); } this.discordRole(id, t, false); }
-      this.log('vip', q.name, 'n\'est plus VIP'); await this.syncTeamDelete(t); delete T[to];
+      this.log('vip', q.name, 'n\'est plus VIP'); await this.syncTeamDelete(t); this.vipRole(to, false); delete T[to];
     }
     this.pushProf(q); this.pushWorld(); this.bcast({ t: 'pres', online: this.online() });
   }
@@ -314,7 +314,7 @@ export class House extends DurableObject {
   async registerCommands() {
     const mem = { type: 6, name: 'membre', description: 'Le membre du serveur', required: true };
     const cmds = [
-      { name: 'vip', description: 'Nommer ou retirer un VIP (admins du serveur)', default_member_permissions: '268435456', dm_permission: false,
+      { name: 'vip', description: 'Nommer ou retirer un VIP (réservé au boss du serveur)', default_member_permissions: '8', dm_permission: false,
         options: [{ type: 1, name: 'ajouter', description: 'Nommer un membre VIP : il reçoit son équipe et son salon privé', options: [mem] },
                   { type: 1, name: 'retirer', description: 'Retirer le statut VIP (son salon privé est supprimé)', options: [mem] }] },
       { name: 'recruter', description: 'VIP : inviter un membre dans ton équipe', dm_permission: false, options: [mem] },
@@ -324,8 +324,34 @@ export class House extends DurableObject {
       { name: 'classement', description: 'Classement des équipes et des joueurs Discolife', dm_permission: false },
       { name: 'profil', description: 'Voir un profil Discolife', dm_permission: false, options: [{ ...mem, required: false }] },
     ];
-    return this.discord('PUT', `/applications/${this.env.CLIENT_ID}/guilds/${this.env.GUILD_ID}/commands`, cmds);
+    const r = await this.discord('PUT', `/applications/${this.env.CLIENT_ID}/guilds/${this.env.GUILD_ID}/commands`, cmds);
+    await this.ensureVipHub();
+    return r;
   }
+  // rôle « ⭐ VIP » + salon texte privé où les VIP commandent le bot
+  async ensureVipHub() {
+    if (!this.env.BOT_TOKEN) return; const g = this.env.GUILD_ID, w = this.world;
+    if (!w.vipRoleId) { const r = await this.discord('POST', `/guilds/${g}/roles`, { name: '⭐ VIP', color: 0xffd84a, hoist: true, mentionable: true }); if (r) w.vipRoleId = r.id; }
+    if (!w.vipCategory) { const cat = await this.discord('POST', `/guilds/${g}/channels`, { name: '🔒 SALONS VIP', type: 4 }); if (cat) w.vipCategory = cat.id; }
+    if (!w.vipChannelId) {
+      const VIEW = 1 << 10, SEND = 1 << 11, HIST = 1 << 16, CMDS = 2 ** 31;
+      const ow = [{ id: g, type: 0, deny: String(VIEW) }];
+      if (w.vipRoleId) ow.push({ id: w.vipRoleId, type: 0, allow: String(VIEW + SEND + HIST + CMDS) });
+      ow.push({ id: this.env.CLIENT_ID, type: 1, allow: String(VIEW + SEND + HIST) });
+      const ch = await this.discord('POST', `/guilds/${g}/channels`, { name: '🤖・bot-vip', type: 0, parent_id: w.vipCategory || undefined, topic: 'Salon privé des VIP : commande le bot Discolife ici', permission_overwrites: ow });
+      if (ch) {
+        w.vipChannelId = ch.id;
+        await this.discord('POST', `/channels/${ch.id}/messages`, { embeds: [{ title: '🤖 Bot Discolife · salon des VIP', color: 0xffd84a,
+          description: 'Ce salon est visible seulement par les ⭐ VIP. Tape `/` pour voir les commandes :',
+          fields: [{ name: '👥 Ton équipe', value: '`/recruter @membre` inviter quelqu\'un (il reçoit Accepter / Refuser)\n`/retirer @membre` retirer quelqu\'un\n`/equipe nom` renommer ton salon privé 🔒' },
+                   { name: '🏆 Infos', value: '`/classement` équipes et joueurs\n`/profil @membre` voir un profil' },
+                   { name: 'ℹ️', value: 'Les points de l\'équipe = l\'XP gagnée par ses membres dans Discolife. Les pièces 🪙 restent perso (garage, accessoires).' }] }] });
+      }
+    }
+    for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
+    this.save();
+  }
+  vipRole(uid, add) { if (this.world.vipRoleId) this.discord(add ? 'PUT' : 'DELETE', `/guilds/${this.env.GUILD_ID}/members/${uid}/roles/${this.world.vipRoleId}`); }
   ixProfile(x) {
     const u = x.user || x, had = !!this.profiles[u.id];
     const p = this.ensureProfile({ id: u.id, name: u.global_name || u.username, avatar: u.avatar || null }, true);
@@ -348,15 +374,17 @@ export class House extends DurableObject {
         const opt = (o, n) => ((o && o.options) || []).find(x => x.name === n)?.value;
         const target = id => { const u = id && d.resolved?.users?.[id]; if (!u) return null; if (u.bot) return 'bot'; return this.ixProfile(u); };
         const who = (o) => { const t = target(opt(o, 'membre')); return t; };
+        const hub = this.world.vipChannelId;
+        if (['recruter', 'retirer', 'equipe'].includes(d.name) && hub && ix.channel_id !== hub && !isAdm) return reply(`Les commandes d'équipe se font dans le salon privé des VIP <#${hub}>.`);
         switch (d.name) {
           case 'vip': {
-            if (!canVip) return reply('🔒 Seuls les admins du serveur peuvent nommer des VIP.');
+            if (!isAdm) return reply('🔒 Seul le boss du serveur peut nommer des VIP.');
             const t = who(sub); if (!t) return reply('Membre introuvable.'); if (t === 'bot') return reply('Pas de bots dans Discolife 🙂');
             const on = sub.name === 'ajouter';
             if (on && T[t.id]) return reply(`⭐ **${t.name}** est déjà VIP.`);
             if (!on && !T[t.id]) return reply(`**${t.name}** n'est pas VIP.`);
             await this.setVip(me, t.id, on, true);
-            if (on) return reply({ content: `⭐ <@${t.id}> est maintenant **VIP** ! Son salon privé 🔒 **${T[t.id].name}** est ouvert.\nIl peut recruter son équipe avec \`/recruter\` et renommer son salon avec \`/equipe\`.`, allowed_mentions: { users: [t.id] } });
+            if (on) return reply({ content: `⭐ <@${t.id}> est maintenant **VIP** ! Son salon privé 🔒 **${T[t.id].name}** est ouvert.\nIl a accès au salon des VIP${this.world.vipChannelId ? ` <#${this.world.vipChannelId}>` : ''} pour recruter son équipe (\`/recruter\`) et renommer son salon (\`/equipe\`).`, allowed_mentions: { users: [t.id] } });
             return reply(`**${t.name}** n'est plus VIP : son équipe et son salon privé ont été supprimés.`);
           }
           case 'recruter': {
@@ -365,8 +393,11 @@ export class House extends DurableObject {
             if (t.id === me.id) return reply('Tu es déjà dans ton équipe 😄');
             if (t.team) return reply(`**${t.name}** est déjà dans une équipe.`);
             this.recruit(me, t.id);
-            return reply({ content: `👥 <@${t.id}>, ⭐ **${me.name}** t'invite dans son équipe **${tm.name}** !\nSi tu acceptes, tu auras accès au salon privé 🔒 **${tm.name}** et tes points compteront pour l'équipe.`, allowed_mentions: { users: [t.id] },
-              components: [{ type: 1, components: [{ type: 2, style: 3, label: 'Accepter', emoji: { name: '✅' }, custom_id: `inv:${t.id}:1` }, { type: 2, style: 4, label: 'Refuser', custom_id: `inv:${t.id}:0` }] }] });
+            const inviteMsg = { content: `👥 <@${t.id}>, ⭐ **${me.name}** t'invite dans son équipe **${tm.name}** !\nSi tu acceptes, tu auras accès au salon privé 🔒 **${tm.name}** et tes points compteront pour l'équipe.`, allowed_mentions: { users: [t.id] },
+              components: [{ type: 1, components: [{ type: 2, style: 3, label: 'Accepter', emoji: { name: '✅' }, custom_id: `inv:${t.id}:1` }, { type: 2, style: 4, label: 'Refuser', custom_id: `inv:${t.id}:0` }] }] };
+            const ch = this.env.ANNOUNCE_CHANNEL_ID;
+            if (ch && ch !== ix.channel_id && await this.discord('POST', `/channels/${ch}/messages`, inviteMsg)) return reply(`📨 Invitation envoyée à **${t.name}** dans <#${ch}> (il peut aussi accepter dans Discolife).`);
+            return reply(inviteMsg);
           }
           case 'retirer': {
             const tm = T[me.id]; if (!tm) return reply('⭐ Seuls les VIP ont une équipe à gérer.');
