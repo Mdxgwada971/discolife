@@ -1,0 +1,26 @@
+name = "discolife"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/auth/*"]
+
+[vars]
+CLIENT_ID = "1570115480784601128"
+GUILD_ID = "1569955594528358471"
+GUILD_INVITE = ""
+ANNOUNCE_CHANNEL_ID = "1570123905019019274"
+
+[[durable_objects.bindings]]
+name = "HOUSE"
+class_name = "House"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["House"]
+
+# Secret (à définir dans le tableau de bord Cloudflare, jamais dans ce fichier) :
+#   CLIENT_SECRET = secret OAuth2 de l'application Discord Discolife
+#   BOT_TOKEN     = jeton du bot Discolife (salons VIP, rôles d'équipe, annonces)
