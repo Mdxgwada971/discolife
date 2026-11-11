@@ -31,8 +31,14 @@ async function whoami(env, token) {
   return { user: { id: u.id, name: u.global_name || u.username, avatar: u.avatar || null }, member };
 }
 
+const hex = h => new Uint8Array((h || '').match(/../g).map(x => parseInt(x, 16)));
+async function verifySig(pk, sig, msg) {
+  try { const k = await crypto.subtle.importKey('raw', hex(pk), { name: 'Ed25519' }, false, ['verify']); return await crypto.subtle.verify({ name: 'Ed25519' }, k, hex(sig), new TextEncoder().encode(msg)); }
+  catch { return false; }
+}
+
 export default {
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
     const url = new URL(req.url);
     const p = url.pathname.replace(/^\/\.proxy/, '');
 
@@ -77,6 +83,22 @@ export default {
       const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
       const h = new Headers(req.headers); h.set('x-user', JSON.stringify(who.user));
       return stub.fetch(new Request(req.url, { headers: h }));
+    }
+
+    // Commandes du serveur Discord (/vip, /recruter, /classement…)
+    if (p === '/api/interactions' && req.method === 'POST') {
+      const sig = req.headers.get('x-signature-ed25519'), ts = req.headers.get('x-signature-timestamp'), body = await req.text();
+      if (!env.PUBLIC_KEY || !sig || !ts || !(await verifySig(env.PUBLIC_KEY, sig, ts + body))) return new Response('signature invalide', { status: 401 });
+      const ix = JSON.parse(body);
+      if (ix.type === 1) return json({ type: 1 });
+      const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
+      ctx.waitUntil(stub.fetch('https://do/ix', { method: 'POST', body }));
+      if (ix.type === 2) return json({ type: 5, data: ['equipe', 'quitter', 'retirer'].includes(ix.data?.name) ? { flags: 64 } : {} });
+      return json({ type: 6 });
+    }
+    if (p === '/api/setup') {
+      const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
+      return new Response(await (await stub.fetch('https://do/setup')).text(), { headers: { 'content-type': 'application/json' } });
     }
 
     if (p === '/api/health') return json({ ok: true });

@@ -695,6 +695,7 @@ function onMsg(m){const t=now();
     case 'boom':boom();sfx('coin');break;
     case 'earn':{const pill=$('#coinPill');pill.classList.remove('bump');void pill.offsetWidth;pill.classList.add('bump');const s=document.createElement('span');s.className='plus';s.textContent='+'+m.n;pill.appendChild(s);setTimeout(()=>s.remove(),1400);break}
     case 'invite':showInvite(m.invite);break;
+    case 'inviteDone':if(modalKind==='invite')closeM();break;
     case 'room':if(cur!==m.room)switchView(m.room);break;
     case 'duel':{const d=m.d;if(d.a===ME||d.b===ME){if(d.state==='pending'&&d.b===ME)toast(`⚔️ ${d.an} te défie en duel !`);duelView(d)}break}
     case 'race':games.race=m.r;if(m.r&&m.r.state==='lobby'&&!raceOpen&&cur==='arcade'&&!m.r.players.some(x=>x.id===ME))toast('🏁 Une course est ouverte à l\'arcade !');drawRace();break;
