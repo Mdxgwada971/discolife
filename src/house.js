@@ -566,6 +566,7 @@ export class House extends DurableObject {
       { name: 'defis', description: 'Voir tes défis du jour Discolife', dm_permission: false },
       { name: 'test', description: 'Teste tous les réglages Discord du bot (réservé au boss)', default_member_permissions: '8', dm_permission: false,
         options: [{ type: 3, name: 'demo', description: 'Par défaut toutes les démos sont lancées ; choisis-en une seule ou aucune', required: false, choices: [{ name: 'Quiz express', value: 'quiz' }, { name: 'Coffre surprise', value: 'coffre' }, { name: 'Question du jour', value: 'question' }, { name: 'Journal du matin', value: 'journal' }, { name: 'Bannière', value: 'banniere' }, { name: 'Salons stats', value: 'stats' }, { name: 'Aucune démo', value: 'aucune' }] }] },
+      { name: 'mot', description: 'Propose un mot pour le mot mystère du jour (le bot dit si tu chauffes)', dm_permission: false, options: [{ type: 3, name: 'essai', description: 'Ton mot', required: true, max_length: 30 }] },
       { name: 'jeux', description: 'Les jeux les plus joués du serveur (temps de jeu)', dm_permission: false },
       { name: 'valo', description: 'Suivi Valorant : RR gagnés et perdus annoncés après chaque ranked', dm_permission: false, options: [
         { type: 1, name: 'lier', description: 'Lier ton compte Riot', options: [{ type: 3, name: 'riot', description: 'Ton Riot ID, ex : Kuma#EUW', required: true, max_length: 22 }, { type: 3, name: 'region', description: 'Région (eu par défaut)', required: false, choices: [{ name: 'Europe', value: 'eu' }, { name: 'Amérique du Nord', value: 'na' }, { name: 'Asie-Pacifique', value: 'ap' }, { name: 'Corée', value: 'kr' }] }] },
@@ -612,7 +613,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v15'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } }
+  async setupCheck() { const V = 'v16'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
@@ -816,12 +817,12 @@ export class House extends DurableObject {
                        { name: '🏁 Courses', value: String(t.stats.races || 0), inline: true }, { name: '⚔️ Duels', value: String(t.stats.duels || 0), inline: true }, { name: '🏅 Badges', value: String(t.badges.length), inline: true }] }] });
           }
         }
-        { const r = await this.liveCommand(d, me, reply, opt, who, isAdm); if (r !== null) return r; }
+        { const r = await this.liveCommand(d, me, reply, opt, who, isAdm, ix.channel_id); if (r !== null) return r; }
         return reply('Commande inconnue.');
       }
       if (ix.type === 3) {
         const [k, to, ok] = (ix.data.custom_id || '').split(':');
-        if (k === 'drop' || k === 'dd') { await this.liveButton(k, to, ok, me, reply, follow); return; }
+        if (k === 'drop' || k === 'dd' || k === 'hint') { await this.liveButton(k, to, ok, me, reply, follow); return; }
         if (k === 'launch') { await this.launchCleanup(ix.message && ix.message.id); return; }
         if (k === 'ev') {
           const e = (this.world.events || {})[to]; if (!e) return follow({ content: '⌛ Cette soirée est terminée.', flags: 64 });

@@ -36,6 +36,24 @@ const WORDS = ['banane', 'tornade', 'pingouin', 'galaxie', 'trompette', 'cactus'
   'licorne', 'toboggan', 'crocodile', 'escargot', 'aspirateur', 'girafe', 'brioche', 'fusee', 'chaussette', 'arcenciel', 'piscine', 'trampoline', 'hamster', 'saucisson', 'bonbon', 'pirate', 'robot',
   'raclette', 'tracteur', 'flamant', 'ananas', 'cornichon', 'grenouille', 'papillon', 'manette', 'pastèque', 'camembert', 'karaoke', 'igloo', 'requin', 'sorcier', 'trottinette', 'popcorn', 'koala'];
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9' -]/g, '').replace(/\s+/g, ' ').trim();
+function lev(a, b) { const m = a.length, n = b.length; if (!m) return n; if (!n) return m; let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; } return prev[n]; }
+// « tu chauffes / tu refroidis » : 4 niveaux, + flèche pour les nombres
+function heat(guess, answers) {
+  const g = norm(guess); let best = { lvl: 0, dir: null };
+  for (const a of answers) {
+    if (/^\d+$/.test(g) && /^\d+$/.test(a)) { const x = +g, y = +a, rel = Math.abs(x - y) / Math.max(Math.abs(y), 1); const lvl = rel <= 0.05 ? 3 : rel <= 0.2 ? 2 : rel <= 0.5 ? 1 : 0; if (lvl >= best.lvl) best = { lvl, dir: x < y ? 'up' : 'down' }; continue; }
+    const r = 1 - lev(g, a) / Math.max(g.length, a.length, 1); const lvl = r >= 0.75 ? 3 : r >= 0.5 ? 2 : r >= 0.3 ? 1 : 0; if (lvl > best.lvl) best = { lvl, dir: null };
+  }
+  return best;
+}
+const HEAT = [['🥶', 'froid'], ['🙂', 'tiède'], ['🥵', 'chaud'], ['🔥', 'brûlant']];
+function hintFor(ans, level) {
+  if (/^\d+$/.test(ans)) { const v = +ans, w = level === 1 ? 0.3 : level === 2 ? 0.1 : 0.03; const lo = Math.floor(v * (1 - w)), hi = Math.ceil(v * (1 + w)); return `C'est un nombre entre **${lo}** et **${hi}**`; }
+  const letters = [...ans]; if (level === 1) return `Ça commence par « **${letters[0].toUpperCase()}** » · **${letters.filter(c => c !== ' ').length}** lettres`;
+  const keep = level === 2 ? (i => i % 2 === 0) : (i => i < letters.length - 2 || i === letters.length - 1);
+  return '`' + letters.map((c, i) => c === ' ' ? ' ' : keep(i) ? c.toUpperCase() : '_').join(' ') + '`';
+}
 const parisNow = () => new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
 const dayKey = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date());
 const rndInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -141,8 +159,8 @@ export function installLive(House) {
     async postQuiz() {
       const ch = await this.chanId(/mini-jeux/i, 0) || await this.chanId(/g[ée]n[ée]ral/i, 0); if (!ch) return; const L = this.L();
       const q = QUIZ[rndInt(0, QUIZ.length - 1)];
-      await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: 0x4fe3ff, title: '⚡ Quiz express !', description: `**${q[0]}**\n\nLe premier qui répond juste ici gagne **25 🪙** · 60 secondes !` }] });
-      L.quiz = { ch, ans: q[1].map(norm), show: q[1][0], until: Date.now() + 60e3, done: false };
+      await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: 0x4fe3ff, title: '⚡ Quiz express !', description: `**${q[0]}**\n\nLe premier qui répond juste ici gagne **25 🪙** · 3 minutes !\nLe bot te dit si tu chauffes 🔥 ou si tu refroidis 🥶, et propose un indice au bout de 3 essais ratés.` }] });
+      L.quiz = { ch, ans: q[1].map(norm), show: q[1][0], until: Date.now() + 180e3, done: false, fails: 0, hints: 0 };
     },
     async postDrop() {
       const ch = await this.chanId(/g[ée]n[ée]ral/i, 0); if (!ch) return; const L = this.L(); const id = Date.now().toString(36);
@@ -156,7 +174,7 @@ export function installLive(House) {
       const w = L.word, f = [];
       if (y) { f.push({ name: '💬 Messages', value: String(y.msgs), inline: true }, { name: '🔊 Vocal', value: `${Math.round(y.voice / 360) / 10} h`, inline: true }, { name: '🏠 Nouveaux', value: String(y.joins || 0), inline: true });
         if (topM && topM[1].m) f.push({ name: '🗣️ Le plus bavard', value: `${nm(topM[0])} · ${topM[1].m} messages`, inline: true }); if (topV && topV[1].v) f.push({ name: '🎧 Le plus en vocal', value: `${nm(topV[0])} · ${Math.round(topV[1].v / 60)} min`, inline: true }); }
-      if (w && w.d === dayKey()) f.push({ name: '🔍 Mot mystère du jour', value: `${w.w.length} lettres, commence par « ${w.w[0].toUpperCase()} ». Le premier qui l'écrit dans un message gagne **50 🪙** !` });
+      if (w && w.d === dayKey()) f.push({ name: '🔍 Mot mystère du jour', value: `${w.w.length} lettres, commence par « ${w.w[0].toUpperCase()} ». Écris-le dans un message ou teste avec `/mot` (le bot dit si tu chauffes 🔥 ou refroidis 🥶) · **50 🪙** au premier !` });
       await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: 0xa66bff, title: '☕ Le journal de La Maison', description: y ? 'Ce qui s\'est passé hier sur le serveur :' : 'Bonne journée à tous !', fields: f, footer: { text: 'Question du jour à 18 h · coffres et quiz surprises dans la journée' } }] });
     },
     async birthdays() {
@@ -184,8 +202,11 @@ export function installLive(House) {
       }
       // quiz express
       if (L.quiz && !L.quiz.done && d.channel_id === L.quiz.ch && Date.now() < L.quiz.until && L.quiz.ans.includes(norm(text))) {
-        L.quiz.done = true; const p = this.liveProfile(uid); p.coins += 25; this.pushProf(p); await this.react(d.channel_id, d.id, '🏆');
-        await this.discord('POST', `/channels/${d.channel_id}/messages`, { content: `🎉 Bravo <@${uid}> ! La réponse était **${L.quiz.show}** · **+25 🪙** sur Discolife`, allowed_mentions: { users: [uid] } });
+        L.quiz.done = true; const gain = Math.max(10, 25 - 7 * (L.quiz.hints || 0)); const p = this.liveProfile(uid); p.coins += gain; this.pushProf(p); await this.react(d.channel_id, d.id, '🏆');
+        await this.discord('POST', `/channels/${d.channel_id}/messages`, { content: `🎉 Bravo <@${uid}> ! La réponse était **${L.quiz.show}** · **+${gain} 🪙** sur Discolife${L.quiz.hints ? ` (${L.quiz.hints} indice${L.quiz.hints > 1 ? 's' : ''})` : ''}`, allowed_mentions: { users: [uid] } });
+      } else if (L.quiz && !L.quiz.done && d.channel_id === L.quiz.ch && Date.now() < L.quiz.until && text.trim() && text.length <= 40) {
+        const h = heat(text, L.quiz.ans); await this.react(d.channel_id, d.id, HEAT[h.lvl][0]); if (h.dir) await this.react(d.channel_id, d.id, h.dir === 'up' ? '⬆️' : '⬇️');
+        L.quiz.fails = (L.quiz.fails || 0) + 1; if (L.quiz.fails % 3 === 0 && (L.quiz.hints || 0) < 3) await this.offerHint('quiz', d.channel_id);
       }
       // mot mystère
       const w = L.word; if (w && !w.found && w.d === dayKey() && new RegExp(`(^|[^a-z])${w.w}([^a-z]|$)`).test(norm(text).replace(/'/g, ' '))) {
@@ -256,6 +277,12 @@ export function installLive(House) {
         footer: { text: `Bilan suivi : ${p.stats.valoW || 0} V / ${p.stats.valoL || 0} D · ${win ? '+10' : '+3'} 🪙 Discolife` } }] });
       this.log('info', p.name, win ? `gagne une ranked Valorant (+${d} RR) 🟢` : `perd une ranked Valorant (${d} RR) 🔴`, 'salle-gaming');
     },
+    async offerHint(kind, ch) {
+      const L = this.L(), st = kind === 'quiz' ? L.quiz : L.word; if (!st || st.offer) return; const n = (st.hints || 0) + 1;
+      const m = await this.discord('POST', `/channels/${ch}/messages`, { content: `💡 ${kind === 'quiz' ? (st.fails || 0) + ' essais ratés' : (st.fails || 0) + ' propositions ratées'}… Vous voulez un indice ? (gain réduit)`,
+        components: [{ type: 1, components: [{ type: 2, style: 1, label: `Oui, indice ${n}/3`, emoji: { name: '💡' }, custom_id: `hint:${kind}` }] }] }); if (m) st.offer = m.id;
+    },
+    hintText(kind) { const L = this.L(), st = kind === 'quiz' ? L.quiz : L.word; const ans = kind === 'quiz' ? st.ans[0] : st.w; return hintFor(ans, st.hints); },
     react(ch, msg, emoji) { return this.discord('PUT', `/channels/${ch}/messages/${msg}/reactions/${encodeURIComponent(emoji)}/@me`); },
 
     // ---------------------------------------------------------------- membre de la semaine (appelé par le récap du dimanche)
@@ -315,8 +342,18 @@ export function installLive(House) {
     },
 
     // ---------------------------------------------------------------- interactions (boutons et commandes)
-    async liveCommand(d, me, reply, opt, who, isAdm) {
+    async liveCommand(d, me, reply, opt, who, isAdm, chId) {
       if (d.name === 'jeux') return reply(this.gamesEmbed());
+      if (d.name === 'mot') {
+        const w = this.L().word; if (!w || w.d !== dayKey()) return reply('Pas encore de mot mystère aujourd\'hui, reviens après 9 h !');
+        if (w.found) return reply(`🔍 Le mot mystère du jour a déjà été trouvé : « **${w.w}** ». Nouveau mot demain !`);
+        const g = norm(opt(d, 'essai') || ''); if (!g) return reply('Propose un mot : `/mot essai: ...`');
+        if (g === w.w) { w.found = me.id; const gain = Math.max(20, 50 - 10 * (w.hints || 0)); me.coins += gain; this.pushProf(me); this.log('info', me.name, `trouve le mot mystère « ${w.w} » 🔍`);
+          return reply({ content: `🎉 <@${me.id}> a trouvé le **mot mystère** : « **${w.w}** » ! **+${gain} 🪙**`, allowed_mentions: { users: [me.id] } }); }
+        const h = heat(g, [w.w]); w.fails = (w.fails || 0) + 1; this.save();
+        if (w.fails % 5 === 0 && (w.hints || 0) < 3) await this.offerHint('mot', chId);
+        return reply(`${HEAT[h.lvl][0]} « ${g} » : **${HEAT[h.lvl][1]}** ! ${h.lvl >= 2 ? 'Tu y es presque…' : 'Essaie autre chose.'} · ${w.fails} essai${w.fails > 1 ? 's' : ''} au total aujourd'hui`);
+      }
       if (d.name === 'valo') {
         const sub = (d.options || [])[0]; if (!sub) return reply('?'); const o = n => ((sub.options || []).find(x => x.name === n) || {}).value;
         if (sub.name === 'lier') {
@@ -348,6 +385,12 @@ export function installLive(House) {
     },
     async liveButton(k, to, ok, me, reply, follow) {
       const L = this.L();
+      if (k === 'hint') {
+        const st = to === 'quiz' ? L.quiz : L.word; const active = st && (to === 'quiz' ? !st.done && Date.now() < st.until : !st.found && st.d === dayKey());
+        if (!active) return reply({ content: '⌛ Trop tard, la réponse a été trouvée ou le temps est écoulé.', components: [] });
+        st.hints = Math.min(3, (st.hints || 0) + 1); st.offer = null; this.save();
+        return reply({ content: `💡 **Indice ${st.hints}/3** (demandé par ${me.name}) : ${this.hintText(to)}`, components: [] });
+      }
       if (k === 'drop') {
         const D = L.drop; if (!D || D.id !== to || D.open) return follow({ content: 'Trop tard, le coffre a déjà été ouvert 😅', flags: 64 }); D.open = true;
         const p = me, r = Math.random(); let txt;
