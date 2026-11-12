@@ -28,6 +28,7 @@ export function installGateway(House) {
       ws.addEventListener('close', ev => { console.log('gw close', ev.code); this._gwErr = 'close ' + ev.code + ' ' + (ev.reason || ''); clearInterval(gw.hb); if (this._gw === gw) this._gw = null; if ([4004, 4010, 4011, 4012, 4013, 4014].includes(ev.code)) this._gwDead = true; if (ev.code === 4000 || ev.code === 4900) { this._gwNext = 0; this._gwFails = 0; setTimeout(() => this.gwEnsure(), 1000); } });
       ws.addEventListener('error', e => console.log('gw err', e.message));
     },
+    gwSleep() { const gw = this._gw; this._gw = null; this._gwSession = null; this._gwSeq = null; if (gw) { clearInterval(gw.hb); try { gw.ws.close(1000, 'veille'); } catch (e) {} } const S = this.srv(); S.ready = false; S.voice = {}; S.pres = {}; console.log('gateway en veille'); },
     gwSend(gw, op, d) { try { gw.ws.send(JSON.stringify({ op, d })); } catch (e) {} },
     gwOnMessage(gw, m) {
       if (m.s) gw.seq = m.s;

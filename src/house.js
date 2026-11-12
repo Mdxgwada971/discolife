@@ -276,7 +276,9 @@ export class House extends DurableObject {
 
   // ------------------------------------------------------------ gains passifs (toutes les 30 s)
   async ensureAlarm() { if (!(await this.ctx.storage.getAlarm())) await this.ctx.storage.setAlarm(Date.now() + 30000); }
-  async alarm() { try { await this.alarmBody(); } catch (e) { console.log('alarm', e); } finally { await this.ctx.storage.setAlarm(Date.now() + (this.sockets().length ? 30000 : 60000)); } }
+  async alarm() { try { await this.alarmBody(); } catch (e) { console.log('alarm', e); } finally { await this.ctx.storage.setAlarm(Date.now() + this.nextTick()); } }
+  // personne sur Discolife : réveil toutes les 5 min (plus tôt si un rappel de soirée approche) pour économiser le quota Cloudflare
+  nextTick() { if (this.sockets().length) return 30000; let n = 300000; for (const e of Object.values(this.world.events || {})) if (!e.reminded) n = Math.min(n, Math.max(15000, e.ts - 15 * 60e3 - Date.now())); return n; }
   async alarmBody() {
     const seen = new Set();
     for (const ws of this.sockets()) {
@@ -299,7 +301,9 @@ export class House extends DurableObject {
     for (const [gid, d] of Object.entries(this.games.duels)) { const age = Date.now() - (d.at || 0);
       if (d.state === 'done' || (d.state === 'pending' && age > 60e3) || (d.state === 'live' && age > 45e3)) { if (d.state !== 'done') { d.log = d.state === 'pending' ? 'Défi expiré' : 'Duel annulé (trop long à jouer)'; d.state = 'done'; this.bcast({ t: 'duel', d }); } delete this.games.duels[gid]; } }
     if (w.boost && Date.now() > w.boost.until) { w.boost = null; this.log('info', 'Discolife', 'fin de l\'événement double XP'); this.pushWorld(); }
-    if (this.env.BOT_TOKEN) { try { await this.setupCheck(); await this.gwEnsure(); await this.seasonCheck(); await this.recapCheck(); await this.eventsCheck(); await this.welcomeCheck(); } catch (e) { console.log('checks', e); } }
+    // veille de la connexion gateway après 15 min sans joueur (elle se rallume dès que quelqu'un ouvre Discolife)
+    if (this.sockets().length) this._idleSince = 0; else { this._idleSince = this._idleSince || Date.now(); if (Date.now() - this._idleSince > 15 * 60e3 && this._gw) this.gwSleep(); }
+    if (this.env.BOT_TOKEN) { try { await this.setupCheck(); if (this.sockets().length) await this.gwEnsure(); await this.seasonCheck(); await this.recapCheck(); await this.eventsCheck(); await this.welcomeCheck(); } catch (e) { console.log('checks', e); } }
     this.save();
   }
 
