@@ -26,3 +26,6 @@ new_sqlite_classes = ["House"]
 # Secret (à définir dans le tableau de bord Cloudflare, jamais dans ce fichier) :
 #   CLIENT_SECRET = secret OAuth2 de l'application Discord Discolife
 #   BOT_TOKEN     = jeton du bot Discolife (salons VIP, rôles d'équipe, annonces)
+
+[observability]
+enabled = true
