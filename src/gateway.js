@@ -67,7 +67,7 @@ export function installGateway(House) {
           if (before !== d.channel_id) this.gwVoiceMoved(d.user_id, d.channel_id);
           break;
         }
-        case 'PRESENCE_UPDATE': if (d.guild_id === this.env.GUILD_ID) { const ch = this.gwPres(d); if (ch) this.bcast({ t: 'sv', pres: { [d.user.id]: S.pres[d.user.id] || null } }); } break;
+        case 'PRESENCE_UPDATE': if (d.guild_id === this.env.GUILD_ID) { const ch = this.gwPres(d), id = d.user.id; if (ch && (this.voiceView(S.voice[id]) || this.online()[id])) this.bcast({ t: 'sv', pres: { [id]: S.pres[id] || null } }); } break;
         case 'MESSAGE_CREATE': this.gwMsg(d); break;
       }
     },
@@ -89,8 +89,8 @@ export function installGateway(House) {
     },
     gwPres(p, quiet) {
       const S = this.srv(), id = p.user && p.user.id; if (!id) return false;
-      const act = (p.activities || []).find(a => a.type === 0 || a.type === 1 || a.type === 2);
-      const v = act ? { g: act.type === 2 ? `🎵 ${act.details || act.name}${act.state ? ' · ' + act.state : ''}` : act.name, k: act.type } : null;
+      const act = (p.activities || []).find(a => a.type === 0 || a.type === 1); // jeux et streams seulement (pas de Spotify)
+      const v = act ? { g: act.name, k: act.type } : null;
       const old = JSON.stringify(S.pres[id] || null); if (v) S.pres[id] = v; else delete S.pres[id];
       return old !== JSON.stringify(v);
     },
@@ -132,7 +132,8 @@ export function installGateway(House) {
       const voice = {}; for (const [u, v] of Object.entries(S.voice)) { const x = this.voiceView(v); if (x) voice[u] = x; }
       const mem = {}; for (const u of Object.keys(voice)) if (S.mem[u]) mem[u] = S.mem[u];
       const last = {}; for (const [k, v] of Object.entries(S.last)) if (pubIds.has(k)) { last[k] = v; for (const m of v) if (S.mem[m.uid]) mem[m.uid] = S.mem[m.uid]; }
-      return { ready: S.ready, ch, voice, mem, pres: S.pres, last };
+      const on = this.online(), pres = {}; for (const [u, v] of Object.entries(S.pres)) if (voice[u] || on[u]) pres[u] = v;
+      return { ready: S.ready, ch, voice, mem, pres, last };
     },
     srvPush(full) { if (full) this.bcast({ t: 'srv', s: this.srvSnapshot() }); },
   });

@@ -709,7 +709,7 @@ function renderLB(){const all=Object.values(PROF).sort((a,b)=>b.lvl-a.lvl||b.xp-
   $('#starboard').innerHTML=W.starboard&&W.starboard.length?W.starboard.slice(0,8).map(s=>`<div class="msg"><div class="ic" style="background:#ffc93c">★</div><span class="n">${esc(s.n)}</span><span class="t">« ${esc(s.t)} »</span></div>`).join(''):'Les messages qui reçoivent 3 ⭐ arrivent ici.';
   const rec=W.records&&W.records.click;$('#records').innerHTML=`⚡ Test de clic : ${rec?`<b>${rec.ms} ms</b> par ${esc(rec.n)}`:'pas encore de record'}`}
 let vsync=true;try{vsync=localStorage.getItem('dl_vsync')!=='0'}catch(e){}
-function goRoom(k){if(k.startsWith('home:'))ensureHome(k.slice(5));if(k===myRoom()){if(k!==cur)switchView(k);return}send({t:'move',room:k,follow:vsync&&!inDiscord});switchView(k)}
+function goRoom(k){if(k.startsWith('home:'))ensureHome(k.slice(5));if(k===myRoom()){if(k!==cur)switchView(k);return}send({t:'move',room:k,follow:vsync&&!inDiscord,ask:inDiscord});switchView(k)}
 setInterval(()=>{if(!inDiscord&&vsync&&ME&&document.visibilityState==='visible')send({t:'vpoll'})},6000);
 
 // ---------------------------------------------------------------- actions perso
@@ -938,6 +938,7 @@ function onMsg(m){const t=now();
       bubbles.push({id:x.uid,text:`#${x.chn} · ${x.text}`,t0:now(),long:true});lastSpeak[x.uid]=now()+1.5;renderSrvCard();if(modalKind==='plan')plan();break}
     case 'vfollow':if(!inDiscord&&vsync&&m.room&&m.room!==myRoom()&&(ROOMS[m.room]||m.room==='team')){send({t:'move',room:m.room});if(SS)SS.back=m.room;else switchView(m.room);toast(`🔊 Tu as changé de vocal → ${roomName(m.room)}`)}break;
     case 'banner':showBanner(m.text,m.by);break;
+    case 'voiceAsk':actionBar(`🔊 Aller aussi dans le vocal « ${roomName(m.room)} » ? Discord relancera Discolife dans ce salon.`,'Y aller',()=>send({t:'voiceGo',room:m.room}));break;
     case 'goto':if(SS)SS.back=m.room;else if(cur!==m.room)switchView(m.room);if(m.voice)toast(`🔊 Tu as changé de vocal → ${m.room==='team'&&myTeam()?myTeam().name:ROOMS[m.room].name}`);break;
     case 'serve':lolaCall({d:m.d,by:m.by});break;
     case 'earn':{const pill=$('#coinPill');pill.classList.remove('bump');void pill.offsetWidth;pill.classList.add('bump');const s=document.createElement('span');s.className='plus';s.textContent='+'+m.n;pill.appendChild(s);setTimeout(()=>s.remove(),1400);break}
@@ -1000,6 +1001,10 @@ function boss(){const opts=Object.values(PROF).sort((a,b)=>a.name.localeCompare(
   $('#bSay').onclick=()=>{const t=$('#bTxt').value.trim();if(!t)return;send({t:'admin',op:'say',text:t,discord:$('#bDc').checked,ping:$('#bEv').checked});closeM()}}
 bossB.onclick=boss;
 const bannerEl=document.createElement('div');bannerEl.id='banner';document.body.appendChild(bannerEl);
+const abar=document.createElement('div');abar.id='abar';document.body.appendChild(abar);
+function actionBar(text,label,fn){abar.innerHTML=`<span>${esc(text)}</span><button class="btn pri">${esc(label)}</button><button class="btn" data-x>✕</button>`;abar.classList.add('on');clearTimeout(abar._t);abar._t=setTimeout(()=>abar.classList.remove('on'),9000);
+  abar.querySelector('.pri').onclick=()=>{abar.classList.remove('on');fn()};abar.querySelector('[data-x]').onclick=()=>abar.classList.remove('on')}
+{const st=document.createElement('style');st.textContent='#abar{position:fixed;left:50%;bottom:16px;transform:translate(-50%,160%);z-index:61;background:#160d2c;border:1px solid #a66bff;color:#fff;padding:10px 12px;border-radius:14px;display:flex;gap:10px;align-items:center;max-width:min(94vw,620px);box-shadow:0 10px 40px #000a;transition:transform .4s}#abar.on{transform:translate(-50%,0)}#abar span{font-size:14px}';document.head.appendChild(st)}
 function showBanner(text,by){bannerEl.innerHTML=`<b>📢 ${esc(by)}</b><span>${esc(text)}</span>`;bannerEl.classList.add('on');sfx('coin');clearTimeout(bannerEl._t);bannerEl._t=setTimeout(()=>bannerEl.classList.remove('on'),9000)}
 {const st=document.createElement('style');st.textContent=`#banner{position:fixed;left:50%;top:14px;transform:translate(-50%,-140%);z-index:60;background:linear-gradient(90deg,#7b6bff,#ff4fa8);color:#fff;padding:12px 20px;border-radius:16px;box-shadow:0 10px 40px #0008;display:flex;flex-direction:column;gap:2px;max-width:min(92vw,560px);transition:transform .5s cubic-bezier(.2,1.4,.4,1)}#banner.on{transform:translate(-50%,0)}#banner span{font-size:15px}`;document.head.appendChild(st)}
 // ---------------------------------------------------------------- chambres perso

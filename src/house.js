@@ -49,14 +49,23 @@ export class House extends DurableObject {
     this.games = { duels: {}, race: null, click: null };
     this.rate = {};
     ctx.blockConcurrencyWhile(async () => {
-      this.profiles = (await ctx.storage.get('profiles')) || {};
+      const legacy = await ctx.storage.get('profiles');
+      if (legacy) { this.profiles = legacy; } else { this.profiles = {}; const all = await ctx.storage.list({ prefix: 'p:' }); for (const [k, v] of all) this.profiles[k.slice(2)] = v; }
+      this._saved = {};
       this.world = (await ctx.storage.get('world')) || { queue: [], np: null, poll: null, feed: [], starboard: [], records: {}, dayFirst: null, seq: 1 };
       this.world.teams = this.world.teams || {}; this.world.admins = this.world.admins || []; this.world.invites = this.world.invites || {};
     });
   }
 
   // ------------------------------------------------------------ persistence
-  save() { if (this._saveT) return; this._saveT = setTimeout(async () => { this._saveT = null; await this.ctx.storage.put({ profiles: this.profiles, world: this.world }); }, 2000); }
+  save() { if (this._saveT) return; this._saveT = setTimeout(() => { this._saveT = null; this.flush(); }, 2000); }
+  async flush() { // une clé par profil, on n'écrit que ce qui a changé
+    const put = {}; const sv = this._saved || (this._saved = {});
+    for (const [id, p] of Object.entries(this.profiles)) { const j = JSON.stringify(p); if (sv[id] !== j) { put['p:' + id] = p; sv[id] = j; } }
+    const wj = JSON.stringify(this.world); if (sv.__w !== wj) { put.world = this.world; sv.__w = wj; }
+    const keys = Object.keys(put); for (let i = 0; i < keys.length; i += 100) { const part = {}; for (const k of keys.slice(i, i + 100)) part[k] = put[k]; await this.ctx.storage.put(part); }
+    if (!this._migrated) { this._migrated = true; if (await this.ctx.storage.get('profiles')) await this.ctx.storage.delete('profiles'); }
+  }
 
   // ------------------------------------------------------------ sockets
   sockets() { return this.ctx.getWebSockets(); }
@@ -318,6 +327,7 @@ export class House extends DurableObject {
     const setRoom = r => { for (const w of this.sockets()) if (this.att(w).id === a.id) { const b = this.att(w); b.room = r; w.serializeAttachment(b); } };
     if (await this.socialMsg(ws, a, p, m)) return;
     switch (m.t) {
+      case 'voiceGo': { if (this.limited(a.id, 'vgo', 2000)) return; await this.voiceGo(a.id, p, m.room, true); return; }
       case 'vc': { // Activité lancée depuis un salon vocal → on démarre dans le salon du jeu correspondant
         if (this.limited(a.id, 'vc', 2000)) return; const r = await this.roomForVoice(m.id, p);
         if (r && r !== a.room) { this.vcSeen[a.id] = m.id; await this.webSocketMessage(ws, JSON.stringify({ t: 'move', room: r, srv: 1 })); this.send(ws, { t: 'goto', room: r }); }
@@ -339,10 +349,8 @@ export class House extends DurableObject {
         if (!(ROOMS.includes(m.room) || isV || isH || (m.room === 'team' && p.team)) || m.room === a.room) return;
         const from = a.room; setRoom(m.room);
         { this.dailyOf(p); const v = p.daily.v || (p.daily.v = []); if (!v.includes(m.room)) { v.push(m.room); this.progress(p, 'visit'); } }
-        if (m.follow && !m.srv && this.vcSeen[a.id]) { // le jeu déplace aussi le vocal Discord
-          const vch = await this.voiceForRoom(m.room, p);
-          if (vch && vch !== this.vcSeen[a.id]) { const ok = await this.discord('PATCH', `/guilds/${this.env.GUILD_ID}/members/${a.id}`, { channel_id: vch }); if (ok) this.vcSeen[a.id] = vch; }
-        }
+        if (m.follow && !m.srv) await this.voiceGo(a.id, p, m.room, false);
+        else if (m.ask && !m.srv) { const cur = this.curVoice(a.id), vch = await this.voiceForRoom(m.room, p); if (cur && vch && vch !== cur) this.send(ws, { t: 'voiceAsk', room: m.room }); }
         const rn = r => r === 'team' ? (this.world.teams[p.team]?.name || 'salon privé') : r && r.startsWith('v:') ? '🔊 ' + ((this.srv().ch[r.slice(2)] || {}).name || 'vocal') : r && r.startsWith('home:') ? 'la chambre de ' + ((this.profiles[r.slice(5)] || {}).name || '?') : ROOM_NAME[r];
         if (m.room !== 'team' && from !== 'team') { this.log('leave', p.name, 'a quitté', rn(from)); this.log('join', p.name, 'a rejoint', rn(m.room)); }
         else if (m.room === 'team') this.log('team', p.name, `entre dans 🔒 ${rn('team')}`);
@@ -600,7 +608,18 @@ export class House extends DurableObject {
     if (!ch) return null; const tm = p.team && this.world.teams[p.team]; if (tm && tm.channelId === ch) return 'team';
     return (await this.voiceMap())[ch] || null;
   }
+  curVoice(uid) { const v = this.srv().voice[uid]; return (v && v.ch) || this.vcSeen[uid] || null; }
+  async voiceGo(uid, p, room, notify) { // déplace le membre dans le salon vocal Discord de la pièce (s'il est déjà en vocal)
+    let cur = this.curVoice(uid);
+    if (!cur && this.env.BOT_TOKEN && !this.gwAlive()) { const vs = await this.discord('GET', `/guilds/${this.env.GUILD_ID}/voice-states/${uid}`); cur = vs && vs.channel_id; }
+    if (!cur) { if (notify) this.toast(uid, '🔊 Rejoins d\'abord un salon vocal sur Discord'); return false; }
+    const vch = await this.voiceForRoom(room, p); if (!vch || vch === cur) return false;
+    const ok = await this.discord('PATCH', `/guilds/${this.env.GUILD_ID}/members/${uid}`, { channel_id: vch });
+    if (ok) this.vcSeen[uid] = vch; else if (notify) this.toast(uid, '❌ Le bot n\'a pas pu te déplacer en vocal');
+    return !!ok;
+  }
   async voiceForRoom(r, p) {
+    if (r && r.startsWith('v:')) return r.slice(2);
     if (r === 'team') { const tm = p.team && this.world.teams[p.team]; return tm ? tm.channelId : null; }
     const m = await this.voiceMap(); return Object.keys(m).find(k => m[k] === r) || null;
   }
