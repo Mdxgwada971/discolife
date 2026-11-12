@@ -11,8 +11,11 @@ export const SHOP = {
   rainbow: { p: 200, n: 'Peinture arc-en-ciel', e: '🌈', kind: 'up' }, smoke: { p: 50, n: 'Échappement fumée', e: '💨', kind: 'up' },
   plate: { p: 40, n: 'Plaque perso', e: '🔤', kind: 'up' },
 };
-const MODELS = ['citadine', 'berline', 'suv', 'sportive'];
-const MODEL_LABEL = { citadine: 'citadine', berline: 'berline', suv: 'SUV', sportive: 'sportive' };
+const CARS = { citadine: ['citadine', 0], berline: ['berline', 0], van: ['van utilitaire', 120], suv: ['SUV', 150], pickup: ['pick-up', 250], offroad: ['4x4 tout-terrain', 300],
+  classique: ['classique des années 60', 350], muscle: ['muscle car', 450], sportive: ['sportive GT', 500], jdm: ['drift JDM', 550], supercar: ['supercar', 1000] };
+for (const [k, [n, p]] of Object.entries(CARS)) if (p) SHOP['car_' + k] = { p, n: n.charAt(0).toUpperCase() + n.slice(1), e: '🚗', kind: 'car' };
+const MODELS = Object.keys(CARS);
+const MODEL_LABEL = Object.fromEntries(Object.entries(CARS).map(([k, v]) => [k, v[0]]));
 const SPOTS = 6;
 const BADGES = {
   first_park: '🅿️ Première caisse', race_win: '🏁 Pilote victorieux', duel_win: '⚔️ Duelliste', click_fast: '⚡ Réflexes de chat',
@@ -54,7 +57,7 @@ export class House extends DurableObject {
   roomOf(id) { return (this.online()[id] || {}).room; }
 
   pub(p) { // profil visible par tout le monde
-    return { id: p.id, name: p.name, avatar: p.avatar, coins: p.coins, xp: p.xp, lvl: p.lvl, acc: p.acc, car: p.car, upOn: p.upOn, plate: p.plate, owned: p.owned, badges: p.badges, voiceSec: p.voiceSec, stats: p.stats, streak: p.streak, team: p.team, admin: this.world.admins.includes(p.id), vip: !!this.world.teams[p.id] };
+    return { id: p.id, name: p.name, avatar: p.avatar, coins: p.coins, xp: p.xp, lvl: p.lvl, acc: p.acc, car: p.car, upOn: p.upOn, plate: p.plate, owned: p.owned, badges: p.badges, voiceSec: p.voiceSec, stats: p.stats, streak: p.streak, team: p.team, playing: p.playing && Date.now() - p.playing.t < 4 * 3600e3 ? p.playing : null, admin: this.world.admins.includes(p.id), vip: !!this.world.teams[p.id] };
   }
   pushProf(p, extra) { this.bcast({ t: 'prof', p: this.pub(p), ...(extra || {}) }); this.save(); }
 
@@ -170,6 +173,16 @@ export class House extends DurableObject {
       case 'speak': if (this.limited(a.id, 'sp', 800)) return; mark(); this.bcast({ t: 'speak', id: a.id }); return;
       case 'react': if (this.limited(a.id, 're', 400)) return; mark(); this.bcast({ t: 'fx', id: a.id, k: clean(m.k, 6) }); p.coins += 0; return;
       case 'sfx': if (this.limited(a.id, 'sx', 1500)) return; mark(); if (['horn', 'drum', 'air'].includes(m.k)) this.bcast({ t: 'fx', id: a.id, k: m.k, sfx: true }); return;
+      case 'playing': {
+        const g = clean(m.g, 30); if (this.limited(a.id, 'pl', 1500)) return; mark();
+        if (!g) { p.playing = null; this.pushProf(p); return; }
+        p.playing = { g, t: Date.now() }; this.log('info', p.name, `joue à 🎮 ${g}`, 'salle-gaming'); this.pushProf(p); return;
+      }
+      case 'order': {
+        const D = { mojito: '🍹 un mojito', soda: '🥤 un soda', cafe: '☕ un café', the: '🍵 un thé glacé', jus: '🧃 un jus', milk: '🥛 un milkshake' };
+        if (!D[m.d] || this.limited('all', 'order', 6000)) return this.toast(a.id, 'La serveuse arrive, patience 😉'); mark();
+        this.log('info', p.name, `commande ${D[m.d]}`, 'salon-chill'); this.bcast({ t: 'serve', by: p.name, id: a.id, d: m.d }); this.addXP(p, 1); return;
+      }
       case 'chat': {
         const text = clean(m.text, 120); if (!text || this.limited(a.id, 'ch', 700)) return; mark();
         const f = this.log('chat', p.name, text); f.uid = a.id;
@@ -184,6 +197,7 @@ export class House extends DurableObject {
       }
       case 'park': {
         if (!MODELS.includes(m.model) || !/^#[0-9a-f]{6}$/i.test(m.col || '')) return;
+        if (CARS[m.model][1] && !p.owned.includes('car_' + m.model)) return this.toast(a.id, `🔒 Achète d'abord la ${MODEL_LABEL[m.model]} à la concession`);
         let spot = p.car ? p.car.spot : null;
         if (spot === null) {
           const used = Object.values(this.profiles).filter(x => x.car).map(x => x.car.spot);
@@ -202,6 +216,7 @@ export class House extends DurableObject {
         const it = SHOP[m.item]; if (!it || p.owned.includes(m.item)) return;
         if (p.coins < it.p) return this.toast(a.id, `Pas assez de 🪙 (il en faut ${it.p})`);
         p.coins -= it.p; p.owned.push(m.item);
+        if (it.kind === 'car') { this.log('car', p.name, `s'offre une ${MODEL_LABEL[m.item.slice(4)]} à la concession 🔑`); if (it.p >= 500) this.announce(`🔑 **${p.name}** s'offre une **${MODEL_LABEL[m.item.slice(4)]}** dans Discolife !`); this.toUser(a.id, { t: 'boom' }); this.pushProf(p); return; }
         if (it.kind === 'acc') p.acc = m.item; else { p.upOn[m.item] = true; if (m.item === 'plate' && !p.plate) p.plate = p.name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8) || 'MAISON'; if (m.item === 'chrome') p.upOn.rainbow = false; if (m.item === 'rainbow') p.upOn.chrome = false; }
         if (m.item === 'crown') this.badge(p, 'crown');
         this.log('shop', p.name, `achète ${it.e} ${it.n}`); this.toUser(a.id, { t: 'boom' }); this.pushProf(p); return;
