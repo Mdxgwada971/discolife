@@ -938,7 +938,7 @@ function onMsg(m){const t=now();
       bubbles.push({id:x.uid,text:`#${x.chn} · ${x.text}`,t0:now(),long:true});lastSpeak[x.uid]=now()+1.5;renderSrvCard();if(modalKind==='plan')plan();break}
     case 'vfollow':if(!inDiscord&&vsync&&m.room&&m.room!==myRoom()&&(ROOMS[m.room]||m.room==='team')){send({t:'move',room:m.room});if(SS)SS.back=m.room;else switchView(m.room);toast(`🔊 Tu as changé de vocal → ${roomName(m.room)}`)}break;
     case 'banner':showBanner(m.text,m.by);break;
-    case 'voiceAsk':actionBar(`🔊 Aller aussi dans le vocal « ${roomName(m.room)} » ? Discord relancera Discolife dans ce salon.`,'Y aller',()=>send({t:'voiceGo',room:m.room}));break;
+    case 'voiceAsk':actionBar(`🔊 Aller aussi dans le vocal « ${roomName(m.room)} » ? Un bouton « Relancer Discolife » t'attendra dans le salon.`,'Y aller',()=>send({t:'voiceGo',room:m.room,act:true}));break;
     case 'goto':if(SS)SS.back=m.room;else if(cur!==m.room)switchView(m.room);if(m.voice)toast(`🔊 Tu as changé de vocal → ${m.room==='team'&&myTeam()?myTeam().name:ROOMS[m.room].name}`);break;
     case 'serve':lolaCall({d:m.d,by:m.by});break;
     case 'earn':{const pill=$('#coinPill');pill.classList.remove('bump');void pill.offsetWidth;pill.classList.add('bump');const s=document.createElement('span');s.className='plus';s.textContent='+'+m.n;pill.appendChild(s);setTimeout(()=>s.remove(),1400);break}

@@ -309,6 +309,7 @@ export class House extends DurableObject {
     if (w.np && Date.now() - w.np.t0 > 60000) { w.np = w.queue.shift() || null; if (w.np) w.np.t0 = Date.now(); this.pushWorld(); }
     for (const [gid, d] of Object.entries(this.games.duels)) { const age = Date.now() - (d.at || 0);
       if (d.state === 'done' || (d.state === 'pending' && age > 60e3) || (d.state === 'live' && age > 45e3)) { if (d.state !== 'done') { d.log = d.state === 'pending' ? 'Défi expiré' : 'Duel annulé (trop long à jouer)'; d.state = 'done'; this.bcast({ t: 'duel', d }); } delete this.games.duels[gid]; } }
+    if ((w.launchMsgs || []).length && this.env.BOT_TOKEN) await this.launchCleanup();
     if (w.boost && Date.now() > w.boost.until) { w.boost = null; this.log('info', 'Discolife', 'fin de l\'événement double XP'); this.pushWorld(); }
     // veille de la connexion gateway après 15 min sans joueur (elle se rallume dès que quelqu'un ouvre Discolife)
     if (this.sockets().length) this._idleSince = 0; else { this._idleSince = this._idleSince || Date.now(); if (Date.now() - this._idleSince > 15 * 60e3 && this._gw) this.gwSleep(); }
@@ -327,7 +328,7 @@ export class House extends DurableObject {
     const setRoom = r => { for (const w of this.sockets()) if (this.att(w).id === a.id) { const b = this.att(w); b.room = r; w.serializeAttachment(b); } };
     if (await this.socialMsg(ws, a, p, m)) return;
     switch (m.t) {
-      case 'voiceGo': { if (this.limited(a.id, 'vgo', 2000)) return; await this.voiceGo(a.id, p, m.room, true); return; }
+      case 'voiceGo': { if (this.limited(a.id, 'vgo', 2000)) return; await this.voiceGo(a.id, p, m.room, true, !!m.act); return; }
       case 'vc': { // Activité lancée depuis un salon vocal → on démarre dans le salon du jeu correspondant
         if (this.limited(a.id, 'vc', 2000)) return; const r = await this.roomForVoice(m.id, p);
         if (r && r !== a.room) { this.vcSeen[a.id] = m.id; await this.webSocketMessage(ws, JSON.stringify({ t: 'move', room: r, srv: 1 })); this.send(ws, { t: 'goto', room: r }); }
@@ -608,14 +609,20 @@ export class House extends DurableObject {
     if (!ch) return null; const tm = p.team && this.world.teams[p.team]; if (tm && tm.channelId === ch) return 'team';
     return (await this.voiceMap())[ch] || null;
   }
+  async postRelaunch(uid, ch) { // bouton « Relancer Discolife » dans le tchat du salon vocal d'arrivée
+    const msg = await this.discord('POST', `/channels/${ch}/messages`, { content: `<@${uid}> 🏠 Tu as changé de salon : relance Discolife ici en un clic`, allowed_mentions: { users: [uid] },
+      components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Relancer Discolife', emoji: { name: '▶️' }, custom_id: `launch:${uid}` }] }] });
+    if (msg) { const w = this.world; w.launchMsgs = (w.launchMsgs || []).concat([{ ch, id: msg.id, t: Date.now() }]).slice(-20); this.save(); }
+  }
+  async launchCleanup(force) { const w = this.world, keep = []; for (const m of w.launchMsgs || []) { if (force === m.id || Date.now() - m.t > 3 * 60e3) await this.discord('DELETE', `/channels/${m.ch}/messages/${m.id}`); else keep.push(m); } w.launchMsgs = keep; }
   curVoice(uid) { const v = this.srv().voice[uid]; return (v && v.ch) || this.vcSeen[uid] || null; }
-  async voiceGo(uid, p, room, notify) { // déplace le membre dans le salon vocal Discord de la pièce (s'il est déjà en vocal)
+  async voiceGo(uid, p, room, notify, act) { // déplace le membre dans le salon vocal Discord de la pièce (s'il est déjà en vocal)
     let cur = this.curVoice(uid);
     if (!cur && this.env.BOT_TOKEN && !this.gwAlive()) { const vs = await this.discord('GET', `/guilds/${this.env.GUILD_ID}/voice-states/${uid}`); cur = vs && vs.channel_id; }
     if (!cur) { if (notify) this.toast(uid, '🔊 Rejoins d\'abord un salon vocal sur Discord'); return false; }
     const vch = await this.voiceForRoom(room, p); if (!vch || vch === cur) return false;
     const ok = await this.discord('PATCH', `/guilds/${this.env.GUILD_ID}/members/${uid}`, { channel_id: vch });
-    if (ok) this.vcSeen[uid] = vch; else if (notify) this.toast(uid, '❌ Le bot n\'a pas pu te déplacer en vocal');
+    if (ok) { this.vcSeen[uid] = vch; if (act) await this.postRelaunch(uid, vch); } else if (notify) this.toast(uid, '❌ Le bot n\'a pas pu te déplacer en vocal');
     return !!ok;
   }
   async voiceForRoom(r, p) {
@@ -798,6 +805,7 @@ export class House extends DurableObject {
       }
       if (ix.type === 3) {
         const [k, to, ok] = (ix.data.custom_id || '').split(':');
+        if (k === 'launch') { await this.launchCleanup(ix.message && ix.message.id); return; }
         if (k === 'ev') {
           const e = (this.world.events || {})[to]; if (!e) return follow({ content: '⌛ Cette soirée est terminée.', flags: 64 });
           e.yes = e.yes.filter(x => x !== me.id); e.maybe = e.maybe.filter(x => x !== me.id);
