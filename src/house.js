@@ -563,6 +563,8 @@ export class House extends DurableObject {
                   { type: 3, name: 'message', description: 'Un petit mot (facultatif)', required: false, max_length: 150 },
                   { type: 7, name: 'salon', description: 'Salon vocal (par défaut : salle-gaming)', required: false, channel_types: [2] }] },
       { name: 'defis', description: 'Voir tes défis du jour Discolife', dm_permission: false },
+      { name: 'test', description: 'Teste tous les réglages Discord du bot (réservé au boss)', default_member_permissions: '8', dm_permission: false,
+        options: [{ type: 3, name: 'demo', description: 'Lancer aussi une démo tout de suite', required: false, choices: [{ name: 'Quiz express', value: 'quiz' }, { name: 'Coffre surprise', value: 'coffre' }, { name: 'Question du jour', value: 'question' }, { name: 'Journal du matin', value: 'journal' }, { name: 'Bannière', value: 'banniere' }, { name: 'Salons stats', value: 'stats' }] }] },
       { name: 'anniv', description: 'Enregistre ton anniversaire (le serveur te le souhaitera avec un cadeau)', dm_permission: false, options: [{ type: 3, name: 'date', description: 'JJ/MM, ex : 14/03', required: true, max_length: 5 }] },
       { name: 'duel', description: 'Défie un membre aux dés, avec une mise en pièces Discolife', dm_permission: false, options: [{ ...mem }, { type: 4, name: 'mise', description: 'Pièces misées par chacun (0 à 500)', required: false, min_value: 0, max_value: 500 }] },
       { name: 'annonce-jeu', description: 'Annonce une partie à tout le serveur (notif pour tout le monde)', dm_permission: false,
@@ -603,7 +605,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v13'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } }
+  async setupCheck() { const V = 'v14'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;

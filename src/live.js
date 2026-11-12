@@ -40,6 +40,7 @@ const parisNow = () => new Date(new Date().toLocaleString('en-US', { timeZone: '
 const dayKey = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date());
 const rndInt = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const SITE = 'https://discolife.warren-molongo.workers.dev';
+const ROLES_LIST = ['🌱 Nouveau', '🌱 Membre', '🏎️ Pilote', '🎧 DJ', '🗣️ Crieur officiel', '🕹️ Champion arcade', '👑 Légende'];
 
 export function installLive(House) {
   Object.assign(House.prototype, {
@@ -225,8 +226,51 @@ export function installLive(House) {
       L.motw = uid; const p = this.liveProfile(uid); p.coins += 100; this.pushProf(p); return { id: uid, name: p.name };
     },
 
+    // ---------------------------------------------------------------- programme de test (/test, réservé au boss)
+    async selfTest(demo) {
+      const g = this.env.GUILD_ID, app = this.env.CLIENT_ID, L = this.L(), res = []; const ok = (sec, name, pass, info) => res.push({ sec, name, pass, info: info || '' });
+      // 1. permissions du bot
+      const me = await this.discord('GET', `/guilds/${g}/members/${app}`), roles = await this.discord('GET', `/guilds/${g}/roles`);
+      let perms = 0n; if (me && roles) { for (const r of roles) if (r.id === g || me.roles.includes(r.id)) perms |= BigInt(r.permissions); }
+      const admin = (perms & 8n) === 8n, has = b => admin || (perms & b) === b;
+      const NEED = [['Voir les salons', 1n << 10n], ['Envoyer des messages', 1n << 11n], ['Intégrer des liens', 1n << 14n], ['Voir l\'historique', 1n << 16n], ['Ajouter des réactions', 1n << 6n], ['Mentionner @everyone', 1n << 17n],
+        ['Gérer les salons', 1n << 4n], ['Gérer les rôles', 1n << 28n], ['Gérer le serveur (AutoMod)', 1n << 5n], ['Déplacer des membres', 1n << 24n], ['Exclure temporairement', 1n << 40n], ['Créer des fils publics', 1n << 35n], ['Écrire dans les fils', 1n << 38n]];
+      ok('Bot', 'Le bot est sur le serveur', !!me); for (const [n, b] of NEED) ok('Permissions', n, has(b), has(b) ? '' : 'à autoriser');
+      // 2. connexion en direct + commandes
+      const S = this.srv(); ok('Connexion', 'Connexion en direct (gateway)', !!this.gwAlive(), this._gwDead ? 'erreur fatale : vérifier les intents du portail' : this._asleep ? 'en veille de nuit' : '');
+      ok('Connexion', 'Salons reçus', Object.keys(S.ch).length > 0, Object.keys(S.ch).length + ' salons'); ok('Connexion', 'Membres reçus (intent membres)', Object.keys(S.mem).length > 0, Object.keys(S.mem).length + ' membres');
+      const cmds = await this.discord('GET', `/applications/${app}/guilds/${g}/commands`); const want = ['vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test'];
+      const miss = want.filter(n => !(cmds || []).some(c => c.name === n)); ok('Commandes', `${want.length} commandes slash`, !miss.length, miss.length ? 'manquent : ' + miss.join(', ') : '');
+      // 3. salons et rôles
+      const chs = await this.discord('GET', `/guilds/${g}/channels`) || []; const ex = id => id && chs.some(c => c.id === id); const byName = re => chs.find(c => re.test(c.name));
+      ok('Salons', '🔢 comptage', ex(L.countCh)); ok('Salons', '➕ Créer un salon', ex(L.createVc)); ok('Salons', '📊 EN DIRECT (3 compteurs)', L.stat && ['on', 'voice', 'members'].every(k => ex(L.stat[k])));
+      ok('Salons', '🤖 bot-vip', ex(this.world.vipChannelId)); ok('Salons', '🛡️ staff', ex(this.world.staffCh));
+      for (const [n, re] of [['#général', /g[ée]n[ée]ral/i], ['#annonces', /annonces/i], ['#bienvenue', /bienvenue/i], ['#starboard', /starboard/i], ['#mini-jeux', /mini-jeux/i], ['#discolife', /discolife/i]]) ok('Salons', n, !!byName(re));
+      const rn = new Set((roles || []).map(r => r.name)); ok('Rôles', '7 rôles de niveau', ROLES_LIST.every(r => rn.has(r)), ROLES_LIST.filter(r => !rn.has(r)).join(', ')); ok('Rôles', '⭐ VIP', rn.has('⭐ VIP'));
+      const am = await this.discord('GET', `/guilds/${g}/auto-moderation/rules`); ok('Anti-spam', '3 règles AutoMod', (am || []).filter(r => /^Discolife/.test(r.name)).length >= 3);
+      // 4. actions réelles dans 🛡️ staff (puis nettoyage)
+      const tch = this.world.staffCh || this.world.vipChannelId;
+      if (tch) {
+        const m = await this.discord('POST', `/channels/${tch}/messages`, { content: '🧪 Test automatique du bot Discolife (ce message va disparaître)' }); ok('Actions', 'Poster un message', !!m);
+        if (m) { ok('Actions', 'Ajouter une réaction', !!(await this.react(tch, m.id, '✅')));
+          const th = await this.discord('POST', `/channels/${tch}/messages/${m.id}/threads`, { name: 'test-discolife', auto_archive_duration: 60 }); ok('Actions', 'Créer un fil', !!th); if (th) await this.discord('DELETE', `/channels/${th.id}`);
+          const ed = await this.discord('PATCH', `/channels/${tch}/messages/${m.id}`, { content: '🧪 Test : modification OK' }); ok('Actions', 'Modifier un message', !!ed);
+          ok('Actions', 'Supprimer un message', !!(await this.discord('DELETE', `/channels/${tch}/messages/${m.id}`))); }
+        const vc = await this.discord('POST', `/guilds/${g}/channels`, { name: '🧪 test', type: 2, parent_id: (chs.find(c => c.id === L.createVc) || {}).parent_id || undefined }); ok('Actions', 'Créer / supprimer un salon vocal', !!vc); if (vc) await this.discord('DELETE', `/channels/${vc.id}`);
+      } else ok('Actions', 'Salon de test (staff)', false, 'salon staff introuvable');
+      ok('Site', 'Bannières en ligne', !!(await this.env.ASSETS.fetch(new Request(SITE + '/banners/day.jpg')).then(r => r.ok).catch(() => false)));
+      // 5. démo à la demande
+      let demoTxt = '';
+      if (demo) { const run = { quiz: () => this.postQuiz(), coffre: () => this.postDrop(), question: () => this.postQotd(), journal: () => this.postJournal(), banniere: () => { this.L().banSlot = null; return this.updateBanner(); }, stats: () => { this.L().statT = 0; return this.updateStats(); } }[demo];
+        if (run) { try { await run(); demoTxt = `\n\n🎬 Démo **${demo}** lancée.`; } catch (e) { demoTxt = `\n\n🎬 Démo **${demo}** : erreur ${e.message}`; } } }
+      const pass = res.filter(r => r.pass).length, secs = [...new Set(res.map(r => r.sec))];
+      return { embeds: [{ color: pass === res.length ? 0x3bd16f : 0xffb84f, title: `🧪 Test du serveur : ${pass}/${res.length} OK`, description: (pass === res.length ? 'Tout fonctionne ✅' : 'Les points ❌ sont à corriger (souvent une autorisation à donner au bot).') + demoTxt,
+        fields: secs.map(sec => ({ name: sec, value: res.filter(r => r.sec === sec).map(r => `${r.pass ? '✅' : '❌'} ${r.name}${r.info ? ` · ${r.info}` : ''}`).join('\n').slice(0, 1020) })) }] };
+    },
+
     // ---------------------------------------------------------------- interactions (boutons et commandes)
     async liveCommand(d, me, reply, opt, who, isAdm) {
+      if (d.name === 'test') { if (!isAdm) return reply('🔒 Réservé au boss.'); return reply(await this.selfTest(opt(d, 'demo'))); }
       if (d.name === 'anniv') {
         const v = (opt(d, 'date') || '').trim(), m = v.match(/^(\d{1,2})\/(\d{1,2})$/); if (!m || +m[1] > 31 || +m[2] > 12 || +m[1] < 1 || +m[2] < 1) return reply('Date invalide : écris par exemple **14/03**.');
         me.bday = `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}`; this.pushProf(me); return reply(`🎂 C'est noté : ton anniversaire est le **${me.bday}**. Le serveur te le souhaitera avec un cadeau !`);
