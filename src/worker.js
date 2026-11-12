@@ -98,7 +98,7 @@ export default {
     }
     if (p === '/api/gw') {
       const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
-      return new Response(await (await stub.fetch('https://do/gw')).text(), { headers: { 'content-type': 'application/json' } });
+      try { return new Response(await (await stub.fetch('https://do/gw')).text(), { headers: { 'content-type': 'application/json' } }); } catch (e) { return json({ workerErr: String(e && e.stack || e) }); }
     }
     if (p === '/api/setup') {
       const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));

@@ -230,7 +230,7 @@ export class House extends DurableObject {
     const path = new URL(req.url).pathname;
     if (path === '/ix') { await this.interaction(await req.json()); return new Response('ok'); }
     if (path === '/setup') return Response.json({ ok: !!(await this.registerCommands()) });
-    if (path === '/gw') { await this.gwEnsure(); const S = this.srv(); return Response.json({ alive: this.gwAlive(), ready: S.ready, ch: Object.keys(S.ch).length, voice: Object.keys(S.voice).length, mem: Object.keys(S.mem).length, dead: !!this._gwDead, err: this._gwErr || null }); }
+    if (path === '/gw') { try { await this.gwEnsure(); } catch (e) { return Response.json({ thrown: String(e && e.stack || e) }); } const S = this.srv(); return Response.json({ alive: this.gwAlive(), ready: S.ready, ch: Object.keys(S.ch).length, voice: Object.keys(S.voice).length, mem: Object.keys(S.mem).length, dead: !!this._gwDead, err: this._gwErr || null }); }
     const u = JSON.parse(req.headers.get('x-user'));
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1]);
