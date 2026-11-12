@@ -43,6 +43,7 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 
 import { installGateway } from './gateway.js';
 import { installSocial, FURN, PETS, ACH } from './social.js';
+import { installLive } from './live.js';
 export class House extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -180,6 +181,7 @@ export class House extends DurableObject {
     if (best) f.push({ name: '⭐ Joueur de la semaine', value: `**${best.name}** · ${best.wk.xp} XP`, inline: true });
     if (car) f.push({ name: '🚗 Caisse de la semaine', value: `**${car.name}** · ${car.n} ❤️ (+50 🪙)`, inline: true });
     if (rec) f.push({ name: '⚡ Record de clic', value: `**${rec.n}** · ${rec.ms} ms`, inline: true });
+    const motw = await this.memberOfWeek(); if (motw) f.push({ name: '🌟 Membre de la semaine', value: `**${motw.name}** · rôle spécial + 100 🪙`, inline: true });
     f.push({ name: '🏠 Discolife', value: `${P_.length} joueurs · ${P_.filter(p => p.car).length} caisses au garage`, inline: true });
     await this.discord('POST', `/channels/${this.gameChannel()}/messages`, { embeds: [{ color: 0xa66bff, title: '📰 Le récap de la semaine', description: 'Ce qui s\'est passé cette semaine dans La Maison :', fields: f, footer: { text: 'Rendez-vous dimanche prochain · Discolife' } }] });
     w.cv = { k: weekKey(), v: {} };
@@ -287,7 +289,7 @@ export class House extends DurableObject {
   async ensureAlarm() { if (!(await this.ctx.storage.getAlarm())) await this.ctx.storage.setAlarm(Date.now() + 30000); }
   async alarm() { try { await this.alarmBody(); } catch (e) { console.log('alarm', e); } finally { await this.ctx.storage.setAlarm(Date.now() + this.nextTick()); } }
   // personne sur Discolife : réveil toutes les 5 min (plus tôt si un rappel de soirée approche) pour économiser le quota Cloudflare
-  nextTick() { if (this.sockets().length) return 30000; let n = 300000; for (const e of Object.values(this.world.events || {})) if (!e.reminded) n = Math.min(n, Math.max(15000, e.ts - 15 * 60e3 - Date.now())); return n; }
+  nextTick() { if (this.sockets().length) return 30000; let n = 300000; const L = this.world.live; if (L && L.quiz && !L.quiz.done) n = 30000; if (!this._asleep) n = Math.min(n, 120000); for (const e of Object.values(this.world.events || {})) if (!e.reminded) n = Math.min(n, Math.max(15000, e.ts - 15 * 60e3 - Date.now())); return n; }
   async alarmBody() {
     const seen = new Set();
     for (const ws of this.sockets()) {
@@ -312,8 +314,10 @@ export class House extends DurableObject {
     if ((w.launchMsgs || []).length && this.env.BOT_TOKEN) await this.launchCleanup();
     if (w.boost && Date.now() > w.boost.until) { w.boost = null; this.log('info', 'Discolife', 'fin de l\'événement double XP'); this.pushWorld(); }
     // veille de la connexion gateway après 15 min sans joueur (elle se rallume dès que quelqu'un ouvre Discolife)
-    if (this.sockets().length) this._idleSince = 0; else { this._idleSince = this._idleSince || Date.now(); if (Date.now() - this._idleSince > 15 * 60e3 && this._gw) this.gwSleep(); }
-    if (this.env.BOT_TOKEN) { try { await this.setupCheck(); if (this.sockets().length) await this.gwEnsure(); await this.seasonCheck(); await this.recapCheck(); await this.eventsCheck(); await this.welcomeCheck(); } catch (e) { console.log('checks', e); } }
+    { const hP = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' })).getHours(), night = hP >= 3 && hP < 8, quiet = !this.sockets().length && !Object.keys(this.srv().voice).length;
+      if (!(night && quiet)) this._idleSince = 0; else { this._idleSince = this._idleSince || Date.now(); if (Date.now() - this._idleSince > 15 * 60e3 && this._gw) this.gwSleep(); }
+      this._asleep = night && quiet && !this._gw && this._idleSince && Date.now() - this._idleSince > 15 * 60e3; }
+    if (this.env.BOT_TOKEN) { try { await this.setupCheck(); if (!this._asleep) await this.gwEnsure(); await this.liveTick(); await this.seasonCheck(); await this.recapCheck(); await this.eventsCheck(); await this.welcomeCheck(); } catch (e) { console.log('checks', e); } }
     this.save();
   }
 
@@ -559,6 +563,8 @@ export class House extends DurableObject {
                   { type: 3, name: 'message', description: 'Un petit mot (facultatif)', required: false, max_length: 150 },
                   { type: 7, name: 'salon', description: 'Salon vocal (par défaut : salle-gaming)', required: false, channel_types: [2] }] },
       { name: 'defis', description: 'Voir tes défis du jour Discolife', dm_permission: false },
+      { name: 'anniv', description: 'Enregistre ton anniversaire (le serveur te le souhaitera avec un cadeau)', dm_permission: false, options: [{ type: 3, name: 'date', description: 'JJ/MM, ex : 14/03', required: true, max_length: 5 }] },
+      { name: 'duel', description: 'Défie un membre aux dés, avec une mise en pièces Discolife', dm_permission: false, options: [{ ...mem }, { type: 4, name: 'mise', description: 'Pièces misées par chacun (0 à 500)', required: false, min_value: 0, max_value: 500 }] },
       { name: 'annonce-jeu', description: 'Annonce une partie à tout le serveur (notif pour tout le monde)', dm_permission: false,
         options: [{ type: 3, name: 'jeu', description: 'Le jeu (ex : Valorant, GTA, Fortnite…)', required: true, max_length: 40 },
                   { type: 3, name: 'message', description: 'Un petit mot en plus (facultatif)', required: false, max_length: 150 },
@@ -597,7 +603,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v12'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); }
+  async setupCheck() { const V = 'v13'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
@@ -801,10 +807,12 @@ export class House extends DurableObject {
                        { name: '🏁 Courses', value: String(t.stats.races || 0), inline: true }, { name: '⚔️ Duels', value: String(t.stats.duels || 0), inline: true }, { name: '🏅 Badges', value: String(t.badges.length), inline: true }] }] });
           }
         }
+        { const r = await this.liveCommand(d, me, reply, opt, who, isAdm); if (r !== null) return r; }
         return reply('Commande inconnue.');
       }
       if (ix.type === 3) {
         const [k, to, ok] = (ix.data.custom_id || '').split(':');
+        if (k === 'drop' || k === 'dd') { await this.liveButton(k, to, ok, me, reply, follow); return; }
         if (k === 'launch') { await this.launchCleanup(ix.message && ix.message.id); return; }
         if (k === 'ev') {
           const e = (this.world.events || {})[to]; if (!e) return follow({ content: '⌛ Cette soirée est terminée.', flags: 64 });
@@ -965,3 +973,4 @@ export class House extends DurableObject {
 }
 installGateway(House);
 installSocial(House);
+installLive(House);
