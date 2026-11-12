@@ -690,7 +690,9 @@ function renderLB(){const all=Object.values(PROF).sort((a,b)=>b.lvl-a.lvl||b.xp-
   const vb=$('#vipBtn');if(vb)vb.onclick=vipManager;const rb=$('#recBtn');if(rb)rb.onclick=recruitPicker;const nb=$('#renBtn');if(nb)nb.onclick=renameTeam;const qb=$('#quitBtn');if(qb)qb.onclick=()=>{send({t:'leaveTeam'})};
   $('#starboard').innerHTML=W.starboard&&W.starboard.length?W.starboard.slice(0,8).map(s=>`<div class="msg"><div class="ic" style="background:#ffc93c">★</div><span class="n">${esc(s.n)}</span><span class="t">« ${esc(s.t)} »</span></div>`).join(''):'Les messages qui reçoivent 3 ⭐ arrivent ici.';
   const rec=W.records&&W.records.click;$('#records').innerHTML=`⚡ Test de clic : ${rec?`<b>${rec.ms} ms</b> par ${esc(rec.n)}`:'pas encore de record'}`}
-function goRoom(k){if(k===myRoom()){if(k!==cur)switchView(k);return}send({t:'move',room:k});switchView(k)}
+let vsync=true;try{vsync=localStorage.getItem('dl_vsync')!=='0'}catch(e){}
+function goRoom(k){if(k===myRoom()){if(k!==cur)switchView(k);return}send({t:'move',room:k,follow:vsync&&!inDiscord});switchView(k)}
+setInterval(()=>{if(!inDiscord&&vsync&&ME&&document.visibilityState==='visible')send({t:'vpoll'})},6000);
 
 // ---------------------------------------------------------------- actions perso
 $('#micBtn').onclick=()=>send({t:'speak'});
@@ -881,7 +883,7 @@ function drawClick(){if(!clickOpen)return;const c=games.click;if(c&&c.id!==lastC
 function onMsg(m){const t=now();
   switch(m.t){
     case 'init':ME=m.me;PROF=m.profiles;ONLINE=m.online;Object.assign(W,{queue:m.queue,np:m.np,poll:m.poll,starboard:m.starboard,records:m.records,teams:m.teams||{}});SHOPDEF=m.shop;BADGEDEF=m.badges;clockSkew=m.now-Date.now();games=m.games||games;
-      feedEl.innerHTML='';(m.feed||[]).forEach(f=>addFeed(f,true));$('#gate').style.display='none';cur=myRoom();renderTabs();renderPanel();renderLB();if(m.invite)showInvite(m.invite);if(cur==='afk')ssStart('chill');else intro={k:cur,t0:now(),seed:1};break;
+      feedEl.innerHTML='';(m.feed||[]).forEach(f=>addFeed(f,true));$('#gate').style.display='none';cur=myRoom();renderTabs();renderPanel();renderLB();if(m.invite)showInvite(m.invite);if(inDiscord&&sdk&&sdk.channelId)send({t:'vc',id:sdk.channelId});if(!inDiscord&&vsync)setTimeout(()=>send({t:'vpoll'}),800);if(cur==='afk')ssStart('chill');else intro={k:cur,t0:now(),seed:1};break;
     case 'pres':{const before=myRoom();ONLINE=m.online;if(!visibleIn(ME,'team')&&cur==='team'&&!myTeam())switchView('garage');renderTabs();renderLB();if(cur==='arcade'||cur==='garage')renderPanel();break}
     case 'prof':{const old=PROF[m.p.id];PROF[m.p.id]=m.p;if(m.drop)dropT[m.drop]=t;if(m.p.id===ME){updHeader();if(modalKind==='shop')shop();if(!myTeam()&&cur==='team')switchView('garage')}
       if(!old||old.name!==m.p.name||old.team!==m.p.team)renderTabs();if(['garage','arcade','team'].includes(cur))renderPanel();renderLB();break}
@@ -893,6 +895,7 @@ function onMsg(m){const t=now();
     case 'star':{const d=feedEl.querySelector(`[data-fid="${m.fid}"] .star`);if(d){d.textContent='★ '+m.n;d.classList.add('on')}break}
     case 'toast':toast(m.text);break;
     case 'boom':boom();sfx('coin');break;
+    case 'goto':if(SS)SS.back=m.room;else if(cur!==m.room)switchView(m.room);if(m.voice)toast(`🔊 Tu as changé de vocal → ${m.room==='team'&&myTeam()?myTeam().name:ROOMS[m.room].name}`);break;
     case 'serve':lolaCall({d:m.d,by:m.by});break;
     case 'earn':{const pill=$('#coinPill');pill.classList.remove('bump');void pill.offsetWidth;pill.classList.add('bump');const s=document.createElement('span');s.className='plus';s.textContent='+'+m.n;pill.appendChild(s);setTimeout(()=>s.remove(),1400);break}
     case 'invite':showInvite(m.invite);break;
@@ -920,9 +923,12 @@ async function start(){
   connect()}
 $('#gateBtn').onclick=()=>{location.href='auth/login'};
 {const b=document.createElement('button');b.id='sndB';b.title='Sons des salons';const up=()=>b.textContent=sndMute?'🔇':'🔊';up();
+  if(!new URLSearchParams(location.search).has('frame_id')){const v=document.createElement('button');v.id='vsB';const uv=()=>{v.textContent=vsync?'🔁':'⏸️';v.title=vsync?'Synchro vocal Discord : activée':'Synchro vocal Discord : désactivée'};uv();
+    v.onclick=e=>{e.stopPropagation();vsync=!vsync;try{localStorage.setItem('dl_vsync',vsync?'1':'0')}catch(_){}uv();toast(vsync?'🔁 Synchro vocal activée : ton salon Discord et ton salon du jeu se suivent':'⏸️ Synchro vocal désactivée')};
+    setTimeout(()=>{cv.parentElement.appendChild(v)},0)}
   b.onclick=e=>{e.stopPropagation();sndMute=!sndMute;try{localStorage.setItem('dl_mute',sndMute?'1':'0')}catch(_){}up();if(!sndMute)roomSound(cur)};
   const host=cv.parentElement;if(getComputedStyle(host).position==='static')host.style.position='relative';host.appendChild(b);
-  const st=document.createElement('style');st.textContent='#sndB{position:absolute;top:10px;right:10px;z-index:3;width:38px;height:38px;border-radius:50%;border:1px solid #ffffff2a;background:#0a0618b3;color:#fff;font-size:17px;cursor:pointer;backdrop-filter:blur(6px)}';document.head.appendChild(st)}
+  const st=document.createElement('style');st.textContent='#vsB{position:absolute;top:54px;right:10px;z-index:3;width:38px;height:38px;border-radius:50%;border:1px solid #ffffff2a;background:#0a0618b3;color:#fff;font-size:17px;cursor:pointer;backdrop-filter:blur(6px)}#sndB{position:absolute;top:10px;right:10px;z-index:3;width:38px;height:38px;border-radius:50%;border:1px solid #ffffff2a;background:#0a0618b3;color:#fff;font-size:17px;cursor:pointer;backdrop-filter:blur(6px)}';document.head.appendChild(st)}
 if(/^(localhost|127\.)/.test(location.hostname))window.__dl={PROF:()=>PROF,lola:()=>lolaCall({d:'mojito',by:'Test'}),cat:ph=>{cat={...cat,ph,t0:now(),dur:30,from:CATBED,to:CATBED}}};
 frame();start();
 
