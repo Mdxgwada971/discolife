@@ -42,6 +42,7 @@ const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f]/g, ' ').trim().
 const rnd = (a, b) => a + Math.random() * (b - a);
 
 import { installGateway } from './gateway.js';
+import { installSocial, FURN, PETS, ACH } from './social.js';
 export class House extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -71,9 +72,9 @@ export class House extends DurableObject {
   roomOf(id) { return (this.online()[id] || {}).room; }
 
   pub(p) { // profil visible par tout le monde
-    return { id: p.id, name: p.name, avatar: p.avatar, coins: p.coins, xp: p.xp, lvl: p.lvl, acc: p.acc, car: p.car, upOn: p.upOn, plate: p.plate, owned: p.owned, badges: p.badges, voiceSec: p.voiceSec, stats: p.stats, streak: p.streak, team: p.team, daily: this.dailyOf(p), hl: p.hl || null, rim: p.rim || null, playing: p.playing && Date.now() - p.playing.t < 4 * 3600e3 ? p.playing : null, admin: this.world.admins.includes(p.id), vip: !!this.world.teams[p.id] };
+    return { id: p.id, name: p.name, avatar: p.avatar, coins: p.coins, xp: p.xp, lvl: p.lvl, acc: p.acc, car: p.car, upOn: p.upOn, plate: p.plate, owned: p.owned, badges: p.badges, voiceSec: p.voiceSec, stats: p.stats, streak: p.streak, team: p.team, ...this.pubSocial(p), daily: this.dailyOf(p), hl: p.hl || null, rim: p.rim || null, playing: p.playing && Date.now() - p.playing.t < 4 * 3600e3 ? p.playing : null, admin: this.world.admins.includes(p.id), vip: !!this.world.teams[p.id] };
   }
-  pushProf(p, extra) { this.bcast({ t: 'prof', p: this.pub(p), ...(extra || {}) }); this.save(); }
+  pushProf(p, extra) { if (!this._inAch) { this._inAch = true; try { this.checkAch(p); } finally { this._inAch = false; } } this.bcast({ t: 'prof', p: this.pub(p), ...(extra || {}) }); this.save(); }
 
   log(k, n, text, ch) {
     const f = { id: this.world.seq++, k, n, t: text, ch: ch || null, ts: Date.now(), stars: [] };
@@ -115,7 +116,7 @@ export class House extends DurableObject {
   progress(p, k, inc = 1) {
     if (!p) return; const t = this.todayChallenges(); this.dailyOf(p); if (!t.keys.includes(k) || p.daily.done.includes(k)) return;
     p.daily.prog[k] = (p.daily.prog[k] || 0) + inc; if (p.daily.prog[k] < CHALLENGES[k][2]) return;
-    p.daily.done.push(k); p.coins += 30; this.toast(p.id, `🎯 Défi réussi : ${CHALLENGES[k][1]} · +30 🪙`); this.toUser(p.id, { t: 'boom' });
+    p.daily.done.push(k); p.stats.daily = (p.stats.daily || 0) + 1; p.coins += 30; this.toast(p.id, `🎯 Défi réussi : ${CHALLENGES[k][1]} · +30 🪙`); this.toUser(p.id, { t: 'boom' });
     if (p.daily.done.length === 3 && !p.daily.bonus) { p.daily.bonus = true; p.coins += 50; this.badge(p, 'daily'); this.log('daily', p.name, 'boucle les 3 défis du jour · +50 🪙 bonus'); }
     this.pushProf(p);
   }
@@ -230,6 +231,10 @@ export class House extends DurableObject {
     const path = new URL(req.url).pathname;
     if (path === '/ix') { await this.interaction(await req.json()); return new Response('ok'); }
     if (path === '/setup') return Response.json({ ok: !!(await this.registerCommands()) });
+    if (path === '/share') { const qs = new URL(req.url).searchParams, p = this.profiles[qs.get('u')]; if (!p) return Response.json({ error: 'profil' }, 404);
+      if (this.limited(p.id, 'share', 60e3)) return Response.json({ error: 'Un partage par minute' }, 429);
+      const ok = await this.shareImage(p, await req.blob(), (qs.get('c') || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 100)); if (ok) this.log('info', p.name, 'partage un moment sur Discord 📸');
+      return Response.json({ ok }); }
     if (path === '/gw') { try { await this.gwEnsure(); } catch (e) { return Response.json({ thrown: String(e && e.stack || e) }); } const S = this.srv(); return Response.json({ alive: this.gwAlive(), ready: S.ready, ch: Object.keys(S.ch).length, voice: Object.keys(S.voice).length, mem: Object.keys(S.mem).length, dead: !!this._gwDead, err: this._gwErr || null }); }
     const u = JSON.parse(req.headers.get('x-user'));
     const pair = new WebSocketPair();
@@ -247,7 +252,7 @@ export class House extends DurableObject {
       setTimeout(() => { this.log('daily', p.name, `bonus du jour : +${bonus} 🪙 (série de ${p.streak} jour${p.streak > 1 ? 's' : ''})`); if (p.streak >= 7) this.badge(p, 'streak7'); }, 300);
       if (!this.world.dayFirst || this.world.dayFirst.day !== today) { this.world.dayFirst = { day: today, id: p.id }; p.coins += 10; setTimeout(() => this.log('daily', p.name, '☀️ premier connecté du jour · +10 🪙'), 400); }
     }
-    this.send(pair[1], { t: 'init', me: p.id, profiles: Object.fromEntries(Object.values(this.profiles).map(x => [x.id, this.pub(x)])), online: this.online(), queue: this.world.queue, np: this.world.np, poll: this.world.poll, feed: this.world.feed.slice(-40), starboard: this.world.starboard, records: this.world.records, teams: this.world.teams, boost: this.boosted() ? this.world.boost : null, season: this.world.season || monthKey(), cv: this.carVotes(), champs: this.world.champs || [], invite: this.world.invites[p.id] || null, shop: SHOP, badges: BADGES, games: this.gamesState(), srv: this.srvSnapshot(), now: Date.now() });
+    this.send(pair[1], { t: 'init', me: p.id, profiles: Object.fromEntries(Object.values(this.profiles).map(x => [x.id, this.pub(x)])), online: this.online(), queue: this.world.queue, np: this.world.np, poll: this.world.poll, feed: this.world.feed.slice(-40), starboard: this.world.starboard, records: this.world.records, teams: this.world.teams, boost: this.boosted() ? this.world.boost : null, season: this.world.season || monthKey(), cv: this.carVotes(), champs: this.world.champs || [], invite: this.world.invites[p.id] || null, shop: SHOP, badges: BADGES, furn: FURN, pets: PETS, achDef: Object.fromEntries(Object.entries(ACH).map(([k, a]) => [k, { e: a[0], n: a[1], th: a[3], u: a[4] }])), fete: this.fete(), games: this.gamesState(), srv: this.srvSnapshot(), now: Date.now() });
     this.pushProf(p);
     this.bcast({ t: 'pres', online: this.online() });
     if (this._new) { this._new = false; setTimeout(() => this.log('welcome', p.name, `arrive pour la première fois dans Discolife ! Bienvenue 🏠`), 200); }
@@ -300,6 +305,7 @@ export class House extends DurableObject {
     const p = this.profiles[a.id]; if (!p) return;
     const mark = () => { for (const w of this.sockets()) if (this.att(w).id === a.id) { const b = this.att(w); b.active = true; w.serializeAttachment(b); } };
     const setRoom = r => { for (const w of this.sockets()) if (this.att(w).id === a.id) { const b = this.att(w); b.room = r; w.serializeAttachment(b); } };
+    if (await this.socialMsg(ws, a, p, m)) return;
     switch (m.t) {
       case 'vc': { // Activité lancée depuis un salon vocal → on démarre dans le salon du jeu correspondant
         if (this.limited(a.id, 'vc', 2000)) return; const r = await this.roomForVoice(m.id, p);
@@ -317,14 +323,15 @@ export class House extends DurableObject {
       }
       case 'move': {
         const isV = typeof m.room === 'string' && m.room.startsWith('v:') && (() => { const c = this.srv().ch[m.room.slice(2)]; return c && c.type === 2 && c.pub; })();
-        if (!(ROOMS.includes(m.room) || isV || (m.room === 'team' && p.team)) || m.room === a.room) return;
+        const isH = typeof m.room === 'string' && m.room.startsWith('home:') && !!this.profiles[m.room.slice(5)];
+        if (!(ROOMS.includes(m.room) || isV || isH || (m.room === 'team' && p.team)) || m.room === a.room) return;
         const from = a.room; setRoom(m.room);
         { this.dailyOf(p); const v = p.daily.v || (p.daily.v = []); if (!v.includes(m.room)) { v.push(m.room); this.progress(p, 'visit'); } }
         if (m.follow && !m.srv && this.vcSeen[a.id]) { // le jeu déplace aussi le vocal Discord
           const vch = await this.voiceForRoom(m.room, p);
           if (vch && vch !== this.vcSeen[a.id]) { const ok = await this.discord('PATCH', `/guilds/${this.env.GUILD_ID}/members/${a.id}`, { channel_id: vch }); if (ok) this.vcSeen[a.id] = vch; }
         }
-        const rn = r => r === 'team' ? (this.world.teams[p.team]?.name || 'salon privé') : r && r.startsWith('v:') ? '🔊 ' + ((this.srv().ch[r.slice(2)] || {}).name || 'vocal') : ROOM_NAME[r];
+        const rn = r => r === 'team' ? (this.world.teams[p.team]?.name || 'salon privé') : r && r.startsWith('v:') ? '🔊 ' + ((this.srv().ch[r.slice(2)] || {}).name || 'vocal') : r && r.startsWith('home:') ? 'la chambre de ' + ((this.profiles[r.slice(5)] || {}).name || '?') : ROOM_NAME[r];
         if (m.room !== 'team' && from !== 'team') { this.log('leave', p.name, 'a quitté', rn(from)); this.log('join', p.name, 'a rejoint', rn(m.room)); }
         else if (m.room === 'team') this.log('team', p.name, `entre dans 🔒 ${rn('team')}`);
         this.bcast({ t: 'pres', online: this.online() }); return;
@@ -913,3 +920,4 @@ export class House extends DurableObject {
   }
 }
 installGateway(House);
+installSocial(House);

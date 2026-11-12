@@ -96,6 +96,14 @@ export default {
       if (ix.type === 2) return json({ type: 5, data: ['equipe', 'quitter', 'retirer', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis'].includes(ix.data?.name) ? { flags: 64 } : {} });
       return json({ type: 6 });
     }
+    if (p === '/api/share' && req.method === 'POST') { // « partager ce moment » : image du jeu postée par le bot
+      const tok = url.searchParams.get('token') || ''; const who = tok ? await whoami(env, tok).catch(() => null) : null;
+      if (!who || !who.member) return json({ error: 'auth' }, 401); const u = who.user;
+      const blob = await req.blob(); if (blob.size > 3e6) return json({ error: 'trop gros' }, 413);
+      const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
+      const r = await stub.fetch('https://do/share?u=' + encodeURIComponent(u.id) + '&c=' + encodeURIComponent((url.searchParams.get('c') || '').slice(0, 100)), { method: 'POST', body: blob });
+      return new Response(await r.text(), { status: r.status, headers: { 'content-type': 'application/json' } });
+    }
     if (p === '/api/gw') {
       const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
       try { return new Response(await (await stub.fetch('https://do/gw')).text(), { headers: { 'content-type': 'application/json' } }); } catch (e) { return json({ workerErr: String(e && e.stack || e) }); }
