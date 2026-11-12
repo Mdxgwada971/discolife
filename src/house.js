@@ -37,7 +37,7 @@ function parisToUTC(y, mo, d, h, mi) { const g = Date.UTC(y, mo, d, h, mi); cons
 const weekKey = () => { const d = paris(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
 const monthKey = () => { const d = paris(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-const parisDay = (d = 0) => new Date(Date.now() + 3600e3 - d * 864e5).toISOString().slice(0, 10);
+const parisDay = (d = 0) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris' }).format(new Date(Date.now() - d * 864e5));
 const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
 const rnd = (a, b) => a + Math.random() * (b - a);
 
@@ -56,7 +56,7 @@ export class House extends DurableObject {
   }
 
   // ------------------------------------------------------------ persistence
-  save() { if (this._saveT) return; this._saveT = setTimeout(async () => { this._saveT = null; await this.ctx.storage.put({ profiles: this.profiles, world: this.world }); }, 400); }
+  save() { if (this._saveT) return; this._saveT = setTimeout(async () => { this._saveT = null; await this.ctx.storage.put({ profiles: this.profiles, world: this.world }); }, 2000); }
 
   // ------------------------------------------------------------ sockets
   sockets() { return this.ctx.getWebSockets(); }
@@ -96,6 +96,7 @@ export class House extends DurableObject {
     p.name = u.name; p.avatar = u.avatar;
     return p;
   }
+  capped(p, src, max) { const d = parisDay(); if (!p.cap || p.cap.d !== d) p.cap = { d }; p.cap[src] = (p.cap[src] || 0) + 1; return p.cap[src] > max; }
   boosted() { const b = this.world.boost; return b && Date.now() < b.until; }
   addXP(p, n) {
     if (this.boosted()) n *= 2;
@@ -126,7 +127,7 @@ export class House extends DurableObject {
     const roles = await this.discord('GET', `/guilds/${this.env.GUILD_ID}/roles`); if (!roles) return null;
     const cols = [0x8fd18a, 0x6bc4ff, 0xff8a3d, 0xb36bff, 0xffd84a, 0xff4fa8, 0xffc93c]; w.lvlRoles = w.lvlRoles || {};
     for (let i = 0; i < ROLES.length; i++) { const name = ROLES[i][1], bare = name.replace(/^\S+\s/, '').toLowerCase();
-      const ex = roles.find(r => r.name === name || r.name.toLowerCase().replace(/^\S+\s/, '') === bare || r.name.toLowerCase() === bare);
+      const ex = roles.find(r => r.name === name);
       if (ex) w.lvlRoles[name] = ex.id; else { const r = await this.discord('POST', `/guilds/${this.env.GUILD_ID}/roles`, { name, color: cols[i], hoist: false }); if (r) w.lvlRoles[name] = r.id; } }
     this.save(); return w.lvlRoles;
   }
@@ -224,18 +225,19 @@ export class House extends DurableObject {
     let ok = true; for (const r of rules) if (!have.has(r.name)) { const res = await this.discord('POST', `/guilds/${g}/auto-moderation/rules`, r); if (!res) ok = false; }
     w.automod = ok; this.save(); return ok;
   }
+  limitedP(id, key, ms) { const w = this.world; w.rl = w.rl || {}; const k = id + key, t = Date.now(); if (w.rl[k] && t - w.rl[k] < ms) return true; w.rl[k] = t; for (const [kk, v] of Object.entries(w.rl)) if (t - v > 864e5) delete w.rl[kk]; return false; }
   limited(id, key, ms) { const k = id + key, t = Date.now(); if (this.rate[k] && t - this.rate[k] < ms) return true; this.rate[k] = t; return false; }
 
   // ------------------------------------------------------------ connexion
   async fetch(req) {
     const path = new URL(req.url).pathname;
     if (path === '/ix') { await this.interaction(await req.json()); return new Response('ok'); }
-    if (path === '/setup') return Response.json({ ok: !!(await this.registerCommands()) });
+    if (path === '/setup') { this.ensureAlarm(); return Response.json({ ok: true }); }
     if (path === '/share') { const qs = new URL(req.url).searchParams, p = this.profiles[qs.get('u')]; if (!p) return Response.json({ error: 'profil' }, 404);
       if (this.limited(p.id, 'share', 60e3)) return Response.json({ error: 'Un partage par minute' }, 429);
       const ok = await this.shareImage(p, await req.blob(), (qs.get('c') || '').replace(/[\u0000-\u001f]/g, ' ').slice(0, 100)); if (ok) this.log('info', p.name, 'partage un moment sur Discord 📸');
       return Response.json({ ok }); }
-    if (path === '/gw') { try { await this.gwEnsure(); } catch (e) { return Response.json({ thrown: String(e && e.stack || e) }); } const S = this.srv(); return Response.json({ alive: this.gwAlive(), ready: S.ready, ch: Object.keys(S.ch).length, voice: Object.keys(S.voice).length, mem: Object.keys(S.mem).length, dead: !!this._gwDead, err: this._gwErr || null }); }
+    if (path === '/gw') { const S = this.srv(); return Response.json({ alive: !!this.gwAlive(), ready: !!S.ready }); }
     const u = JSON.parse(req.headers.get('x-user'));
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1]);
@@ -274,12 +276,14 @@ export class House extends DurableObject {
 
   // ------------------------------------------------------------ gains passifs (toutes les 30 s)
   async ensureAlarm() { if (!(await this.ctx.storage.getAlarm())) await this.ctx.storage.setAlarm(Date.now() + 30000); }
-  async alarm() {
+  async alarm() { try { await this.alarmBody(); } catch (e) { console.log('alarm', e); } finally { await this.ctx.storage.setAlarm(Date.now() + (this.sockets().length ? 30000 : 60000)); } }
+  async alarmBody() {
     const seen = new Set();
     for (const ws of this.sockets()) {
       const a = this.att(ws); if (!a.id || seen.has(a.id)) continue; seen.add(a.id);
       if (a.room === 'afk') continue;
       const p = this.profiles[a.id]; if (!p) continue;
+      if (Date.now() - (a.lastAct || a.since || 0) > 10 * 60e3) continue; // inactif : pas de gain passif
       const before = p.voiceSec; p.voiceSec += 30;
       const gain = (2 + (a.active ? 1 : 0)) * (this.boosted() ? 2 : 1); p.coins += gain; this.addXP(p, 3); this.progress(p, 'time');
       for (const w of this.sockets()) if (this.att(w).id === a.id) { const b = this.att(w); b.active = false; w.serializeAttachment(b); }
@@ -292,18 +296,21 @@ export class House extends DurableObject {
     // musique : morceau suivant toutes les 60 s
     const w = this.world;
     if (w.np && Date.now() - w.np.t0 > 60000) { w.np = w.queue.shift() || null; if (w.np) w.np.t0 = Date.now(); this.pushWorld(); }
+    for (const [gid, d] of Object.entries(this.games.duels)) { const age = Date.now() - (d.at || 0);
+      if (d.state === 'done' || (d.state === 'pending' && age > 60e3) || (d.state === 'live' && age > 45e3)) { if (d.state !== 'done') { d.log = d.state === 'pending' ? 'Défi expiré' : 'Duel annulé (trop long à jouer)'; d.state = 'done'; this.bcast({ t: 'duel', d }); } delete this.games.duels[gid]; } }
     if (w.boost && Date.now() > w.boost.until) { w.boost = null; this.log('info', 'Discolife', 'fin de l\'événement double XP'); this.pushWorld(); }
-    if (this.env.BOT_TOKEN) { try { await this.gwEnsure(); await this.seasonCheck(); await this.recapCheck(); await this.eventsCheck(); await this.welcomeCheck(); } catch (e) { console.log('checks', e); } }
-    await this.ctx.storage.setAlarm(Date.now() + (this.sockets().length ? 30000 : 60000));
+    if (this.env.BOT_TOKEN) { try { await this.setupCheck(); await this.gwEnsure(); await this.seasonCheck(); await this.recapCheck(); await this.eventsCheck(); await this.welcomeCheck(); } catch (e) { console.log('checks', e); } }
     this.save();
   }
 
   // ------------------------------------------------------------ messages
   async webSocketMessage(ws, raw) {
-    let m; try { m = JSON.parse(raw); } catch { return; }
+    if (typeof raw !== 'string' || raw.length > 4096) return;
+    let m; try { m = JSON.parse(raw); } catch { return; } if (!m || typeof m !== 'object') return;
     const a = this.att(ws); if (!a.id) return;
+    { const b = this._bucket || (this._bucket = {}); const t = Date.now(), k = a.id; const x = b[k] || (b[k] = { tok: 25, t }); x.tok = Math.min(25, x.tok + (t - x.t) / 1000 * 12); x.t = t; if (x.tok < 1) return; x.tok -= 1; }
     const p = this.profiles[a.id]; if (!p) return;
-    const mark = () => { for (const w of this.sockets()) if (this.att(w).id === a.id) { const b = this.att(w); b.active = true; w.serializeAttachment(b); } };
+    const mark = () => { for (const w of this.sockets()) if (this.att(w).id === a.id) { const b = this.att(w); b.active = true; b.lastAct = Date.now(); w.serializeAttachment(b); } };
     const setRoom = r => { for (const w of this.sockets()) if (this.att(w).id === a.id) { const b = this.att(w); b.room = r; w.serializeAttachment(b); } };
     if (await this.socialMsg(ws, a, p, m)) return;
     switch (m.t) {
@@ -313,7 +320,7 @@ export class House extends DurableObject {
         return;
       }
       case 'vpoll': { // version web : on suit le salon vocal Discord
-        if (this.limited(a.id, 'vp', 4000) || !this.env.BOT_TOKEN) return;
+        if (this.limited(a.id, 'vp', 4000) || !this.env.BOT_TOKEN || this.gwAlive()) return;
         const vs = await this.discord('GET', `/guilds/${this.env.GUILD_ID}/voice-states/${a.id}`); const ch = vs && vs.channel_id;
         if (!ch) { delete this.vcSeen[a.id]; return; }
         if (this.vcSeen[a.id] === ch) return; this.vcSeen[a.id] = ch;
@@ -322,6 +329,7 @@ export class House extends DurableObject {
         return;
       }
       case 'move': {
+        if (!m.srv && this.limited(a.id, 'mv', 500)) return;
         const isV = typeof m.room === 'string' && m.room.startsWith('v:') && (() => { const c = this.srv().ch[m.room.slice(2)]; return c && c.type === 2 && c.pub; })();
         const isH = typeof m.room === 'string' && m.room.startsWith('home:') && !!this.profiles[m.room.slice(5)];
         if (!(ROOMS.includes(m.room) || isV || isH || (m.room === 'team' && p.team)) || m.room === a.room) return;
@@ -353,7 +361,7 @@ export class House extends DurableObject {
         const text = clean(m.text, 120); if (!text || this.limited(a.id, 'ch', 700)) return; mark();
         const f = this.log('chat', p.name, text); f.uid = a.id;
         this.bcast({ t: 'chat', id: a.id, text, fid: f.id });
-        p.stats.msgs++; this.addXP(p, 2); this.progress(p, 'chat'); if (p.stats.msgs >= 100) this.badge(p, 'chatty'); this.pushProf(p); return;
+        p.stats.msgs++; if (!this.capped(p, 'chat', 60)) this.addXP(p, 2); this.progress(p, 'chat'); if (p.stats.msgs >= 100) this.badge(p, 'chatty'); this.pushProf(p); return;
       }
       case 'star': {
         const f = this.world.feed.find(x => x.id === m.fid && x.k === 'chat'); if (!f || f.stars.includes(a.id) || f.uid === a.id) return;
@@ -362,6 +370,7 @@ export class House extends DurableObject {
         this.save(); return;
       }
       case 'park': {
+        if (this.limited(a.id, 'park', 8000)) return this.toast(a.id, 'Attends un peu avant de regarer');
         if (!MODELS.includes(m.model) || !/^#[0-9a-f]{6}$/i.test(m.col || '')) return;
         if (CARS[m.model][1] && !p.owned.includes('car_' + m.model)) return this.toast(a.id, `🔒 Achète d'abord la ${MODEL_LABEL[m.model]} à la concession`);
         let spot = p.car ? p.car.spot : null;
@@ -374,10 +383,10 @@ export class House extends DurableObject {
           }
         }
         p.car = { model: m.model, col: m.col, spot, t: Date.now() };
-        p.stats.parks++; this.addXP(p, 10); this.badge(p, 'first_park'); this.progress(p, 'park');
+        p.stats.parks++; if (!this.capped(p, 'park', 1)) this.addXP(p, 10); this.badge(p, 'first_park'); this.progress(p, 'park');
         this.log('car', p.name, `a garé sa ${MODEL_LABEL[m.model]}`, 'garage'); this.pushProf(p, { drop: p.id }); return;
       }
-      case 'unpark': if (!p.car) return; p.car = null; this.log('car', p.name, 'a sorti sa caisse du garage'); this.pushProf(p); return;
+      case 'unpark': if (this.limited(a.id, 'unpark', 4000)) return; if (!p.car) return; p.car = null; this.log('car', p.name, 'a sorti sa caisse du garage'); this.pushProf(p); return;
       case 'buy': {
         const it = SHOP[m.item]; if (!it || p.owned.includes(m.item)) return;
         if (p.coins < it.p) return this.toast(a.id, `Pas assez de 🪙 (il en faut ${it.p})`);
@@ -417,12 +426,13 @@ export class House extends DurableObject {
         const s = clean(m.s, 50); if (!s || this.limited(a.id, 'so', 3000)) return; mark();
         const w = this.world; const item = { s, by: p.name, id: a.id };
         if (!w.np) { w.np = { ...item, t0: Date.now() }; } else { w.queue.push(item); w.queue = w.queue.slice(0, 30); }
-        p.stats.songs++; this.addXP(p, 5); this.progress(p, 'song'); if (p.stats.songs >= 10) this.badge(p, 'dj');
+        p.stats.songs++; if (!this.capped(p, 'song', 15)) this.addXP(p, 5); this.progress(p, 'song'); if (p.stats.songs >= 10) this.badge(p, 'dj');
         this.log('music', p.name, `ajoute « ${s} » à la file`); this.pushWorld(); this.pushProf(p); return;
       }
-      case 'skip': { const w = this.world; if (this.limited('all', 'skip', 3000)) return; w.np = w.queue.shift() || null; if (w.np) w.np.t0 = Date.now(); this.log('music', p.name, w.np ? `passe au morceau suivant : « ${w.np.s} »` : 'a vidé la musique'); this.pushWorld(); return; }
-      case 'shuffle': { const q = this.world.queue; for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [q[i], q[j]] = [q[j], q[i]]; } this.log('music', p.name, 'a mélangé la file'); this.pushWorld(); return; }
+      case 'skip': if (this.limited(a.id, 'skip', 5000)) return; { const w = this.world; if (this.limited('all', 'skip', 3000)) return; w.np = w.queue.shift() || null; if (w.np) w.np.t0 = Date.now(); this.log('music', p.name, w.np ? `passe au morceau suivant : « ${w.np.s} »` : 'a vidé la musique'); this.pushWorld(); return; }
+      case 'shuffle': if (this.limited(a.id, 'shuffle', 5000)) return; { const q = this.world.queue; for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [q[i], q[j]] = [q[j], q[i]]; } this.log('music', p.name, 'a mélangé la file'); this.pushWorld(); return; }
       case 'poll': {
+        if (!this.isAdmin(p) && this.limitedP(a.id, 'poll', 60e3)) return this.toast(a.id, 'Un sondage par minute maximum');
         const q = clean(m.q, 80), opts = (m.opts || []).map(o => clean(o, 40)).filter(Boolean).slice(0, 4);
         if (!q || opts.length < 2 || this.limited(a.id, 'po', 20000)) return;
         this.world.poll = { q, by: p.name, opts: opts.map(l => ({ l, v: [] })), ts: Date.now() };
@@ -472,7 +482,7 @@ export class House extends DurableObject {
     } else {
       const t = T[to]; if (!t) return;
       for (const id of t.members) { const x = this.profiles[id]; if (x) { x.team = null; this.pushProf(x); } this.discordRole(id, t, false); }
-      this.log('vip', q.name, 'n\'est plus VIP'); await this.syncTeamDelete(t); this.vipRole(to, false); delete T[to];
+      this.log('vip', q.name, 'n\'est plus VIP'); delete T[to]; for (const id of t.members || []) { const q = this.profiles[id]; if (q && q.team === to) q.team = null; } await this.syncTeamDelete(t); this.vipRole(to, false);
     }
     this.pushProf(q); this.pushWorld(); this.bcast({ t: 'pres', online: this.online() });
   }
@@ -574,6 +584,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
+  async setupCheck() { const V = 'v12'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
@@ -688,7 +699,7 @@ export class House extends DurableObject {
             if (!jeu) return reply('Donne le nom du jeu 🎮');
             if (link && !/^https?:\/\/\S+$/i.test(link)) return reply('Le lien doit commencer par https://');
             if (!link) link = `https://www.google.com/search?q=${encodeURIComponent(jeu + ' télécharger')}`;
-            if (!isAdm && this.limited(me.id, 'prop', 60 * 60e3)) return reply('⏳ Tu as déjà proposé un jeu il y a moins d\'une heure.');
+            if (!isAdm && this.limitedP(me.id, 'prop', 60 * 60e3)) return reply('⏳ Tu as déjà proposé un jeu il y a moins d\'une heure.');
             const T_ = [`**${me.name}** propose **${jeu}** ! Téléchargez-le, on va bientôt y jouer 🎮`, `Nouveau jeu en vue 👀 **${me.name}** veut qu'on se lance sur **${jeu}**. Préparez vos PC !`,
                         `📣 **${me.name}** a trouvé notre prochain jeu : **${jeu}**. Téléchargez-le dès maintenant, la partie arrive bientôt 🔥`];
             const c = { id: (this.world.seq = (this.world.seq || 0) + 1).toString(36), by: me.id, byName: me.name, jeu, extra, link, text: T_[Math.floor(Math.random() * T_.length)],
@@ -710,7 +721,7 @@ export class House extends DurableObject {
             const dm = opt(d, 'date'); if (dm) { const x = dm.match(/^(\d{1,2})\/(\d{1,2})$/); if (!x) return reply('Date invalide : écris par exemple **15/11**.'); dd = +x[1]; mo = +x[2] - 1; }
             let ts = parisToUTC(y, mo, dd, H, Mi); if (ts < Date.now() - 60e3) { if (dm) ts = parisToUTC(y + 1, mo, dd, H, Mi); else ts += 864e5; }
             if (ts - Date.now() > 60 * 864e5) return reply('La soirée doit être dans les 60 prochains jours.');
-            if (!isAdm && this.limited(me.id, 'soiree', 30 * 60e3)) return reply('⏳ Tu as déjà planifié une soirée il y a moins de 30 min.');
+            if (!isAdm && this.limitedP(me.id, 'soiree', 30 * 60e3)) return reply('⏳ Tu as déjà planifié une soirée il y a moins de 30 min.');
             const ping = isAdm || !!T[me.id];
             const e = { id: (this.world.seq = (this.world.seq || 0) + 1).toString(36), by: me.id, byName: me.name, jeu, extra, ts, yes: [me.id], maybe: [], ping, voice: opt(d, 'salon') || await this.gamingVoice(), reminded: ts - Date.now() < 15 * 60e3 };
             const sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, { content: ping ? '@everyone' : '', allowed_mentions: { parse: ping ? ['everyone'] : [] }, ...this.eventMsg(e) });
@@ -726,20 +737,21 @@ export class House extends DurableObject {
           case 'annonce-jeu': {
             const jeu = clean(opt(d, 'jeu'), 40), extra = clean(opt(d, 'message') || '', 150);
             if (!jeu) return reply('Donne le nom du jeu 🎮');
-            if (!isAdm && this.limited(me.id, 'annjeu', 30 * 60e3)) return reply('⏳ Tu as déjà fait une annonce il y a moins de 30 min.');
-            if (!isAdm && this.limited('all', 'annjeu', 5 * 60e3)) return reply('⏳ Une partie vient d\'être annoncée, attends quelques minutes.');
+            if (!isAdm && this.limitedP(me.id, 'annjeu', 30 * 60e3)) return reply('⏳ Tu as déjà fait une annonce il y a moins de 30 min.');
+            if (!isAdm && this.limitedP('all', 'annjeu', 5 * 60e3)) return reply('⏳ Une partie vient d\'être annoncée, attends quelques minutes.');
+            const pingE = isAdm || !!T[me.id];
             const T_ = [`**${me.name}** lance une partie de **${jeu}** et cherche des joueurs ! 🔥`, `Qui est chaud pour du **${jeu}** ? **${me.name}** vous attend 😎`,
                         `🚨 Partie de **${jeu}** en approche ! **${me.name}** monte une équipe, ramenez-vous`, `**${me.name}** a envie de jouer à **${jeu}**. Qui le suit ? 🎯`];
             const c = { id: (this.world.seq = (this.world.seq || 0) + 1).toString(36), by: me.id, jeu, extra, text: T_[Math.floor(Math.random() * T_.length)],
               voice: opt(d, 'salon') || await this.gamingVoice(), av: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=128` : null, who: [me.id], t: Date.now() };
-            const body = { content: '@everyone', allowed_mentions: { parse: ['everyone'], users: [] }, ...this.gameCallMsg(c) };
+            const body = { content: pingE ? '@everyone' : '', allowed_mentions: { parse: pingE ? ['everyone'] : [], users: [] }, ...this.gameCallMsg(c) };
             let sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
             if (!sent && await this.ensureAnnounceRights()) sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
             if (!sent) return reply('❌ Le bot n\'a pas le droit de mentionner @everyone dans le salon d\'annonces. Le boss doit lui donner la permission « Mentionner @everyone ».');
             this.world.gameCalls = this.world.gameCalls || {}; this.world.gameCalls[c.id] = c;
             const ids = Object.keys(this.world.gameCalls); if (ids.length > 30) delete this.world.gameCalls[ids[0]];
             me.playing = { g: jeu, t: Date.now() }; this.pushProf(me); this.log('info', me.name, `annonce une partie de 🎮 ${jeu}`, 'salle-gaming');
-            return reply(`📢 C'est annoncé dans <#${this.gameChannel()}> avec une notif pour tout le monde !`);
+            return reply(`📢 C'est annoncé dans <#${this.gameChannel()}>${pingE ? ' avec une notif pour tout le monde' : ''} !`);
           }
           case 'classement': {
             const tms = Object.values(T).sort((a, b) => b.score - a.score);
@@ -826,8 +838,9 @@ export class House extends DurableObject {
   duelChallenge(p, to) {
     const q = this.profiles[to]; if (!q || to === p.id || !this.online()[to]) return this.toast(p.id, 'Ce joueur n\'est pas en ligne');
     if (Object.values(this.games.duels).some(d => d.state !== 'done' && [d.a, d.b].some(x => x === p.id || x === to))) return this.toast(p.id, 'Un de vous deux est déjà en duel');
+    if (this.limited([p.id, to].sort().join(':'), 'duelpair', 120e3)) return this.toast(p.id, 'Laissez passer 2 minutes avant un nouveau duel entre vous');
     const gid = 'd' + Date.now().toString(36);
-    const d = this.games.duels[gid] = { id: gid, a: p.id, b: to, an: p.name, bn: q.name, hp: { [p.id]: 100, [to]: 100 }, turn: p.id, state: 'pending', log: `${p.name} défie ${q.name} !` };
+    const d = this.games.duels[gid] = { id: gid, a: p.id, b: to, an: p.name, bn: q.name, hp: { [p.id]: 100, [to]: 100 }, turn: p.id, state: 'pending', at: Date.now(), log: `${p.name} défie ${q.name} !` };
     this.log('fight', p.name, `défie ${q.name} en duel 1v1`, 'arcade');
     this.bcast({ t: 'duel', d });
     setTimeout(() => { if (d.state === 'pending') { d.state = 'done'; d.log = `${q.name} n'a pas répondu`; this.bcast({ t: 'duel', d }); delete this.games.duels[gid]; } }, 30000);
@@ -835,7 +848,7 @@ export class House extends DurableObject {
   duelAnswer(p, gid, ok) {
     const d = this.games.duels[gid]; if (!d || d.state !== 'pending' || d.b !== p.id) return;
     if (!ok) { d.state = 'done'; d.log = `${d.bn} refuse le duel`; this.bcast({ t: 'duel', d }); delete this.games.duels[gid]; return; }
-    d.state = 'live'; d.log = `Le duel commence ! À ${d.an} de jouer.`; this.bcast({ t: 'duel', d });
+    d.state = 'live'; d.at = Date.now(); d.log = `Le duel commence ! À ${d.an} de jouer.`; this.bcast({ t: 'duel', d });
   }
   duelAct(p, gid, k) {
     const d = this.games.duels[gid]; if (!d || d.state !== 'live' || d.turn !== p.id) return;
@@ -845,12 +858,12 @@ export class House extends DurableObject {
     else { const x = Math.floor(rnd(15, 26)); d.hp[p.id] = Math.min(100, d.hp[p.id] + x); d.log = `${p.name} se soigne +${x}`; }
     if (d.hp[other] <= 0) {
       d.state = 'done'; d.winner = p.id; d.log += ` — ${p.name} gagne le duel !`;
-      p.coins += 30; p.stats.duels++; this.addXP(p, 40); this.badge(p, 'duel_win'); this.progress(p, 'duel');
+      if (!this.capped(p, 'duel', 10)) { p.coins += 30; this.addXP(p, 40); } p.stats.duels++; this.badge(p, 'duel_win'); this.progress(p, 'duel');
       const o = this.profiles[other]; if (o) { this.addXP(o, 10); this.pushProf(o); }
       this.log('fight', p.name, `gagne le duel contre ${on} · +30 🪙`, 'arcade'); this.announce(`⚔️ **${p.name}** bat **${on}** en duel dans Discolife !`); this.pushProf(p);
       this.bcast({ t: 'duel', d }); setTimeout(() => delete this.games.duels[gid], 15000); return;
     }
-    d.turn = other; this.bcast({ t: 'duel', d });
+    d.turn = other; d.at = Date.now(); this.bcast({ t: 'duel', d });
   }
 
   // ------------------------------------------------------------ course (2 joueurs minimum)
@@ -897,11 +910,11 @@ export class House extends DurableObject {
     const c = this.games.click; if (!c || c.id !== id) return;
     if (Object.keys(c.players).length < 2) { c.state = 'done'; this.bcast({ t: 'click', c: { ...this.clickView(), cancel: 'Pas assez de joueurs (2 minimum)' } }); return; }
     c.state = 'wait'; this.bcast({ t: 'click', c: this.clickView() });
-    setTimeout(() => { c.state = 'go'; this.bcast({ t: 'click', c: this.clickView() }); setTimeout(() => this.clickEnd(c), 3500); }, rnd(1500, 4000));
+    setTimeout(() => { c.state = 'go'; c.goAt = Date.now(); this.bcast({ t: 'click', c: this.clickView() }); setTimeout(() => this.clickEnd(c), 3500); }, rnd(1500, 4000));
   }
   clickHit(p, ms, early) {
     const c = this.games.click; if (!c || !['wait', 'go'].includes(c.state)) return; const x = c.players[p.id]; if (!x || x.ms !== null || x.early) return;
-    if (early || c.state === 'wait') { x.early = true; } else x.ms = Math.max(80, Math.min(3000, Math.round(+ms || 3000)));
+    if (early || c.state === 'wait') { x.early = true; } else { const srvMs = Date.now() - (c.goAt || Date.now()); x.ms = Math.max(100, Math.min(3000, Math.max(Math.round(+ms || 3000), srvMs - 250))); }
     this.bcast({ t: 'click', c: this.clickView() });
     if (Object.values(c.players).every(y => y.ms !== null || y.early)) this.clickEnd(c);
   }

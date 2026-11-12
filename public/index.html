@@ -948,9 +948,11 @@ function onMsg(m){const t=now();
     case 'race':games.race=m.r;if(m.r&&m.r.state==='lobby'&&!raceOpen&&cur==='arcade'&&!m.r.players.some(x=>x.id===ME))toast('🏁 Une course est ouverte à l\'arcade !');drawRace();break;
     case 'click':{const c=m.c;const prev=games.click;games.click=c;if(c&&c.state==='go'&&(!prev||prev.state!=='go'))clickT0=performance.now();if(c&&c.state==='lobby'&&!clickOpen&&cur==='arcade'&&!c.players.some(x=>x.id===ME))toast('⚡ Un test de clic est ouvert à l\'arcade !');drawClick();break}
   }}
-function connect(){const u=new URL('api/ws',location.href);u.protocol=u.protocol==='https:'?'wss:':'ws:';u.searchParams.set('token',token);
-  ws=new WebSocket(u.toString());ws.onmessage=e=>{try{onMsg(JSON.parse(e.data))}catch(err){console.error(err)}};
-  ws.onclose=e=>{if(e.code===4001){try{localStorage.removeItem('dl_token')}catch(x){}gate('Ta session a expiré. Reconnecte-toi.')}else if(e.code===4003)gate('Discolife est réservé aux membres du serveur La Maison.',true);else{$('#online').textContent='reconnexion…';setTimeout(connect,2000)}}}
+let wsBack=2000;
+function connect(){const u=new URL('api/ws',location.href);u.protocol=u.protocol==='https:'?'wss:':'ws:';
+  const safe=/^[A-Za-z0-9._~-]+$/.test(token||'')&&!inDiscord;if(!safe)u.searchParams.set('token',token);
+  ws=safe?new WebSocket(u.toString(),['dl',token]):new WebSocket(u.toString());ws.onopen=()=>{wsBack=2000};ws.onmessage=e=>{try{onMsg(JSON.parse(e.data))}catch(err){console.error(err)}};
+  ws.onclose=e=>{if(e.code===4001){try{localStorage.removeItem('dl_token')}catch(x){}gate('Ta session a expiré. Reconnecte-toi.')}else if(e.code===4003)gate('Discolife est réservé aux membres du serveur La Maison.',true);else{$('#online').textContent='reconnexion…';setTimeout(connect,wsBack);wsBack=Math.min(30000,wsBack*1.7)}}}
 setInterval(()=>send({t:'ping'}),25000);
 function gate(msg,notMember){$('#gate').style.display='flex';$('#gateMsg').textContent=msg;$('#gateBtn').style.display=inDiscord?'none':'inline-flex'}
 async function start(){
@@ -1073,7 +1075,7 @@ function updFete(){let el=$('#fetePill');if(!FETE)return;if(!el){el=document.cre
 // ---------------------------------------------------------------- partager ce moment
 async function shareMoment(){try{const c=document.createElement('canvas');c.width=1000;c.height=1000;const x=c.getContext('2d');x.drawImage(cv,0,0);x.fillStyle='rgba(10,6,24,.7)';x.fillRect(0,950,1000,50);x.fillStyle='#fff';x.font='800 22px system-ui';x.fillText(`🏠 Discolife · ${roomName(cur)} · ${me().name}`,20,983);
   const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.88));const cap=prompt('Une légende ? (facultatif)','')??null;if(cap===null)return;toast('📸 Envoi…');
-  const r=await fetch('api/share?token='+encodeURIComponent(token)+'&c='+encodeURIComponent(cap||''),{method:'POST',body:blob});const d=await r.json().catch(()=>({}));toast(d.ok?'📸 Partagé sur Discord !':('❌ '+(d.error||'échec du partage')))}catch(e){toast('❌ Partage impossible')}}
+  const r=await fetch('api/share?c='+encodeURIComponent(cap||''),{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'image/jpeg'},body:blob});const d=await r.json().catch(()=>({}));toast(d.ok?'📸 Partagé sur Discord !':('❌ '+(d.error||'échec du partage')))}catch(e){toast('❌ Partage impossible')}}
 {const sb=document.createElement('button');sb.id='shB';sb.title='Partager ce moment sur Discord';sb.textContent='📸';sb.onclick=e=>{e.stopPropagation();shareMoment()};setTimeout(()=>cv.parentElement.appendChild(sb),0);
   const cb=document.createElement('label');cb.className='mut';cb.style.cssText='display:flex;gap:4px;align-items:center;font-size:12px;white-space:nowrap';cb.innerHTML=`<input type="checkbox" id="c2d" ${chatToDc?'checked':''}> → #général`;const row=$('#chatIn').parentElement;row.appendChild(cb);
   $('#c2d').onchange=e=>{chatToDc=e.target.checked;try{localStorage.setItem('dl_c2d',chatToDc?'1':'0')}catch(_){}}

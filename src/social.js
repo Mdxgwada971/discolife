@@ -85,6 +85,7 @@ export function installSocial(House) {
           this.log('info', p.name, `achète ${it.e} ${it.n}${it.ltd ? ' (édition limitée)' : ''} pour sa chambre`); this.pushProf(p); return true;
         }
         case 'place': { // poser un meuble de son inventaire dans sa chambre
+          if (this.limited(a.id, 'pl', 250)) return true;
           const it = FURN[m.k], h = this.homeOf(p); p.furn = p.furn || {};
           const x = Math.floor(+m.x), y = Math.floor(+m.y); if (!it || !(x >= 1 && y >= 1 && x < GRID && y < GRID)) return true;
           const used = h.items.filter(i => i.k === m.k).length; if ((p.furn[m.k] || 0) <= used) { this.toast(a.id, 'Achète d\'abord ce meuble'); return true; }
@@ -92,7 +93,7 @@ export function installSocial(House) {
           if (h.items.length >= 40) { this.toast(a.id, 'Ta chambre est pleine (40 meubles)'); return true; }
           h.items.push({ k: m.k, x, y, r: (+m.r || 0) % 2 }); this.checkAch(p); this.pushProf(p); return true;
         }
-        case 'unplace': { const h = this.homeOf(p); h.items = h.items.filter(i => !(i.x === +m.x && i.y === +m.y)); this.pushProf(p); return true; }
+        case 'unplace': { if (this.limited(a.id, 'unpl', 250)) return true; const h = this.homeOf(p); h.items = h.items.filter(i => !(i.x === +m.x && i.y === +m.y)); this.pushProf(p); return true; }
         case 'homeTheme': { const h = this.homeOf(p); h.theme = Math.max(0, Math.min(5, Math.floor(+m.v || 0))); this.pushProf(p); return true; }
         case 'gift': {
           const q = this.profiles[m.to]; if (!q || q.id === p.id || this.limited(a.id, 'gift', 3000)) return true;
@@ -129,9 +130,10 @@ export function installSocial(House) {
           this.bcast({ t: 'poke', k: m.t, from: a.id, to: q.id });
           if (m.t === 'wave') this.toUser(q.id, { t: 'toast', text: `👋 ${p.name} te fait coucou !` }); return true;
         }
-        case 'speakFor': { const id = String(m.id || ''); if (!/^\d{5,25}$/.test(id) || this.limited(a.id + id, 'spk', 700)) return true; this.bcast({ t: 'speak', id }); return true; }
+        case 'speakFor': { const id = String(m.id || ''); if (!/^\d{5,25}$/.test(id) || !(this.srv().voice[id] || this.online()[id]) || this.limited(a.id + id, 'spk', 700)) return true; this.bcast({ t: 'speak', id }); return true; }
         case 'chatDiscord': {
-          const text = clean(m.text, 300); if (!text) return true;
+          const text = clean(m.text, 300).replace(/@(everyone|here)/gi, '@\u200b$1'); if (!text) return true;
+          if (/(discord\.gg|discord(app)?\.com\/invite|dsc\.gg)\//i.test(text)) { this.toast(a.id, 'Les invitations ne passent pas'); return true; }
           if (this.limited(a.id, 'cd', 4000)) { this.toast(a.id, 'Doucement, un message toutes les 4 secondes'); return true; }
           const ok = await this.postToDiscordChat(p, text); if (!ok) this.toast(a.id, 'Impossible d\'envoyer sur Discord');
           return true;

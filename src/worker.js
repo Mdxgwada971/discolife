@@ -14,21 +14,35 @@ async function exchange(env, code, redirect_uri) {
 }
 
 // Vérifie le jeton Discord : renvoie l'utilisateur et s'il est membre de La Maison
+// identité Discord du jeton + vérification d'appartenance au serveur (refus par défaut)
+const WHO = new Map(); // petit cache par isolate : évite 2 appels Discord à chaque reconnexion
 async function whoami(env, token) {
-  if (env.DEV === '1' && token.startsWith('dev:')) {
-    const [, id, name] = token.split(':');
+  if (env.DEV === '1' && /^dev[:_]/.test(token)) {
+    const [, id, name] = token.split(/[:_]/);
     return { user: { id, name: decodeURIComponent(name || 'dev' + id), avatar: null }, member: true };
   }
-  const h = { authorization: `Bearer ${token}` };
-  const r = await fetch(`${DISCORD}/users/@me`, { headers: h });
-  if (!r.ok) return null;
+  const c = WHO.get(token); if (c && Date.now() - c.t < 10 * 60e3) return c.v;
+  const r = await fetch(`${DISCORD}/users/@me`, { headers: { authorization: `Bearer ${token}` } });
+  if (r.status === 401) return null;            // jeton vraiment invalide
+  if (!r.ok) return { transient: true };         // 429 / 5xx : on réessaiera
   const u = await r.json();
-  let member = true;
-  if (env.GUILD_ID) {
-    const g = await fetch(`${DISCORD}/users/@me/guilds`, { headers: h });
-    if (g.ok) { const list = await g.json(); member = list.some(x => x.id === env.GUILD_ID); }
+  let member = false;
+  if (env.GUILD_ID && env.BOT_TOKEN) {
+    const g = await fetch(`${DISCORD}/guilds/${env.GUILD_ID}/members/${u.id}`, { headers: { authorization: `Bot ${env.BOT_TOKEN}` } });
+    if (g.ok) member = true; else if (g.status !== 404) return { transient: true };
+  } else if (env.GUILD_ID) {
+    const g = await fetch(`${DISCORD}/users/@me/guilds`, { headers: { authorization: `Bearer ${token}` } });
+    if (!g.ok) return { transient: true }; member = (await g.json()).some(x => x.id === env.GUILD_ID);
   }
-  return { user: { id: u.id, name: u.global_name || u.username, avatar: u.avatar || null }, member };
+  const v = { user: { id: u.id, name: u.global_name || u.username, avatar: u.avatar || null }, member };
+  WHO.set(token, { t: Date.now(), v }); if (WHO.size > 500) WHO.delete(WHO.keys().next().value);
+  return v;
+}
+// le jeton arrive dans le sous-protocole WebSocket (pas dans l'URL, pour ne pas finir dans les logs)
+function wsToken(req, url) {
+  const pr = (req.headers.get('Sec-WebSocket-Protocol') || '').split(',').map(x => x.trim());
+  const i = pr.indexOf('dl'); if (i >= 0 && pr[i + 1]) return pr[i + 1];
+  return url.searchParams.get('token') || '';
 }
 
 const hex = h => new Uint8Array((h || '').match(/../g).map(x => parseInt(x, 16)));
@@ -73,16 +87,19 @@ export default {
     // Connexion temps réel au jeu
     if (p === '/api/ws') {
       if (req.headers.get('Upgrade') !== 'websocket') return new Response('websocket attendu', { status: 426 });
-      const token = url.searchParams.get('token') || '';
-      const who = token ? await whoami(env, token).catch(() => null) : null;
-      if (!who || !who.member) {
+      const token = wsToken(req, url); const proto = (req.headers.get('Sec-WebSocket-Protocol') || '').includes('dl') ? { 'Sec-WebSocket-Protocol': 'dl' } : {};
+      const who = token ? await whoami(env, token).catch(() => ({ transient: true })) : null;
+      if (!who || who.transient || !who.member) {
         const pair = new WebSocketPair(); pair[1].accept();
-        pair[1].close(who ? 4003 : 4001, who ? 'pas membre' : 'jeton invalide');
-        return new Response(null, { status: 101, webSocket: pair[0] });
+        const code = !who ? 4001 : who.transient ? 4008 : 4003;
+        pair[1].close(code, code === 4001 ? 'jeton invalide' : code === 4008 ? 'réessaie' : 'pas membre');
+        return new Response(null, { status: 101, webSocket: pair[0], headers: proto });
       }
       const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
       const h = new Headers(req.headers); h.set('x-user', JSON.stringify(who.user));
-      return stub.fetch(new Request(req.url, { headers: h }));
+      const res = await stub.fetch(new Request(req.url.replace(/([?&])token=[^&]*/, '$1'), { headers: h }));
+      if (!proto['Sec-WebSocket-Protocol'] || !res.webSocket) return res;
+      return new Response(null, { status: 101, webSocket: res.webSocket, headers: proto });
     }
 
     // Commandes du serveur Discord (/vip, /recruter, /classement…)
@@ -97,8 +114,10 @@ export default {
       return json({ type: 6 });
     }
     if (p === '/api/share' && req.method === 'POST') { // « partager ce moment » : image du jeu postée par le bot
-      const tok = url.searchParams.get('token') || ''; const who = tok ? await whoami(env, tok).catch(() => null) : null;
+      const tok = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '') || url.searchParams.get('token') || ''; const who = tok ? await whoami(env, tok).catch(() => null) : null;
       if (!who || !who.member) return json({ error: 'auth' }, 401); const u = who.user;
+      if (+(req.headers.get('content-length') || 0) > 3e6) return json({ error: 'image trop grosse' }, 413);
+      if (!/^image\/(jpeg|png|webp)$/.test(req.headers.get('content-type') || '')) return json({ error: 'format' }, 415);
       const blob = await req.blob(); if (blob.size > 3e6) return json({ error: 'trop gros' }, 413);
       const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
       const r = await stub.fetch('https://do/share?u=' + encodeURIComponent(u.id) + '&c=' + encodeURIComponent((url.searchParams.get('c') || '').slice(0, 100)), { method: 'POST', body: blob });

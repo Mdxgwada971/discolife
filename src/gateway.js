@@ -11,18 +11,21 @@ export function installGateway(House) {
     },
     gwAlive() { return this._gw && this._gw.ws && Date.now() - (this._gw.lastAck || 0) < 120e3; },
     async gwEnsure() {
-      if (!this.env.BOT_TOKEN || this.gwAlive() || this._gwConnecting) return;
+      if (!this.env.BOT_TOKEN || this.gwAlive() || this._gwConnecting || this._gwDead) return;
+      if (this._gwNext && Date.now() < this._gwNext) return;
+      this._gwFails = (this._gwFails || 0) + 1; this._gwNext = Date.now() + Math.min(600e3, 5e3 * 2 ** Math.min(7, this._gwFails - 1));
       this._gwConnecting = true;
       try { await this.gwConnect(); this._gwErr = null; } catch (e) { console.log('gw connect', e); this._gwErr = String(e && e.message || e); } finally { this._gwConnecting = false; }
     },
     async gwConnect() {
       if (this._gw && this._gw.ws) { try { this._gw.ws.close(); } catch (e) {} clearInterval(this._gw.hb); }
-      const res = await fetch('https://gateway.discord.gg/?v=10&encoding=json', { headers: { Upgrade: 'websocket' } });
+      const base = (this._gwSession && this._gwResume) ? this._gwResume.replace('wss://', 'https://') : 'https://gateway.discord.gg';
+      const res = await fetch(base + '/?v=10&encoding=json', { headers: { Upgrade: 'websocket' } });
       const ws = res.webSocket; if (!ws) throw new Error('pas de websocket ' + res.status);
       ws.accept();
       const gw = this._gw = { ws, seq: null, hb: null, lastAck: Date.now(), session: this._gwSession || null };
       ws.addEventListener('message', ev => { try { this.gwOnMessage(gw, JSON.parse(ev.data)); } catch (e) { console.log('gw msg', e); } });
-      ws.addEventListener('close', ev => { console.log('gw close', ev.code); this._gwErr = 'close ' + ev.code + ' ' + (ev.reason || ''); clearInterval(gw.hb); if (this._gw === gw) this._gw = null; if (ev.code === 4004) this._gwDead = true; });
+      ws.addEventListener('close', ev => { console.log('gw close', ev.code); this._gwErr = 'close ' + ev.code + ' ' + (ev.reason || ''); clearInterval(gw.hb); if (this._gw === gw) this._gw = null; if ([4004, 4010, 4011, 4012, 4013, 4014].includes(ev.code)) this._gwDead = true; if (ev.code === 4000 || ev.code === 4900) { this._gwNext = 0; this._gwFails = 0; setTimeout(() => this.gwEnsure(), 1000); } });
       ws.addEventListener('error', e => console.log('gw err', e.message));
     },
     gwSend(gw, op, d) { try { gw.ws.send(JSON.stringify({ op, d })); } catch (e) {} },
@@ -37,13 +40,14 @@ export function installGateway(House) {
       }
       if (m.op === 11) { gw.lastAck = Date.now(); return; }
       if (m.op === 1) { this.gwSend(gw, 1, gw.seq); return; }
-      if (m.op === 7) { try { gw.ws.close(4000); } catch (e) {} return; }
-      if (m.op === 9) { this._gwSession = null; this._gwSeq = null; gw.session = null; setTimeout(() => { try { gw.ws.close(4000); } catch (e) {} }, 2000); return; }
+      if (m.op === 7) { try { gw.ws.close(4900); } catch (e) {} return; }
+      if (m.op === 9) { this._gwSession = null; this._gwSeq = null; gw.session = null; setTimeout(() => { try { gw.ws.close(4900); } catch (e) {} }, 2000); return; }
       if (m.op !== 0) return;
       this._gwSeq = gw.seq; gw.lastAck = Date.now();
       const d = m.d, S = this.srv();
       switch (m.t) {
-        case 'READY': this._gwSession = gw.session = d.session_id; break;
+        case 'READY': this._gwSession = gw.session = d.session_id; this._gwResume = d.resume_gateway_url || null; this._gwFails = 0; this._gwNext = 0; break;
+        case 'RESUMED': this._gwFails = 0; this._gwNext = 0; break;
         case 'GUILD_CREATE': if (d.id !== this.env.GUILD_ID) break;
           S.ch = {}; for (const c of d.channels || []) this.gwChan(c);
           for (const mb of d.members || []) this.gwMem(mb);
