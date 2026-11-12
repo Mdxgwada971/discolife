@@ -41,6 +41,7 @@ const parisDay = (d = 0) => new Date(Date.now() + 3600e3 - d * 864e5).toISOStrin
 const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, n);
 const rnd = (a, b) => a + Math.random() * (b - a);
 
+import { installGateway } from './gateway.js';
 export class House extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -194,7 +195,7 @@ export class House extends DurableObject {
   }
   // accueil des nouveaux membres (liste des membres, nécessite l'intent « membres du serveur »)
   async welcomeCheck() {
-    const w = this.world; if (w.memT && Date.now() - w.memT < 110e3) return; w.memT = Date.now();
+    const w = this.world; if (this.gwAlive()) return; if (w.memT && Date.now() - w.memT < 110e3) return; w.memT = Date.now();
     const mem = await this.discord('GET', `/guilds/${this.env.GUILD_ID}/members?limit=1000`); if (!mem) return;
     const ids = mem.filter(x => !x.user.bot).map(x => x.user.id);
     if (!w.known) { w.known = ids; this.save(); return; }
@@ -245,12 +246,12 @@ export class House extends DurableObject {
       setTimeout(() => { this.log('daily', p.name, `bonus du jour : +${bonus} 🪙 (série de ${p.streak} jour${p.streak > 1 ? 's' : ''})`); if (p.streak >= 7) this.badge(p, 'streak7'); }, 300);
       if (!this.world.dayFirst || this.world.dayFirst.day !== today) { this.world.dayFirst = { day: today, id: p.id }; p.coins += 10; setTimeout(() => this.log('daily', p.name, '☀️ premier connecté du jour · +10 🪙'), 400); }
     }
-    this.send(pair[1], { t: 'init', me: p.id, profiles: Object.fromEntries(Object.values(this.profiles).map(x => [x.id, this.pub(x)])), online: this.online(), queue: this.world.queue, np: this.world.np, poll: this.world.poll, feed: this.world.feed.slice(-40), starboard: this.world.starboard, records: this.world.records, teams: this.world.teams, boost: this.boosted() ? this.world.boost : null, season: this.world.season || monthKey(), cv: this.carVotes(), champs: this.world.champs || [], invite: this.world.invites[p.id] || null, shop: SHOP, badges: BADGES, games: this.gamesState(), now: Date.now() });
+    this.send(pair[1], { t: 'init', me: p.id, profiles: Object.fromEntries(Object.values(this.profiles).map(x => [x.id, this.pub(x)])), online: this.online(), queue: this.world.queue, np: this.world.np, poll: this.world.poll, feed: this.world.feed.slice(-40), starboard: this.world.starboard, records: this.world.records, teams: this.world.teams, boost: this.boosted() ? this.world.boost : null, season: this.world.season || monthKey(), cv: this.carVotes(), champs: this.world.champs || [], invite: this.world.invites[p.id] || null, shop: SHOP, badges: BADGES, games: this.gamesState(), srv: this.srvSnapshot(), now: Date.now() });
     this.pushProf(p);
     this.bcast({ t: 'pres', online: this.online() });
     if (this._new) { this._new = false; setTimeout(() => this.log('welcome', p.name, `arrive pour la première fois dans Discolife ! Bienvenue 🏠`), 200); }
     else if (!already) this.log('join', p.name, 'a rejoint', ROOM_NAME[room]);
-    this.ensureAlarm();
+    this.ensureAlarm(); this.gwEnsure();
     this.save();
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
@@ -286,7 +287,7 @@ export class House extends DurableObject {
     const w = this.world;
     if (w.np && Date.now() - w.np.t0 > 60000) { w.np = w.queue.shift() || null; if (w.np) w.np.t0 = Date.now(); this.pushWorld(); }
     if (w.boost && Date.now() > w.boost.until) { w.boost = null; this.log('info', 'Discolife', 'fin de l\'événement double XP'); this.pushWorld(); }
-    if (this.env.BOT_TOKEN) { try { await this.seasonCheck(); await this.recapCheck(); await this.eventsCheck(); await this.welcomeCheck(); } catch (e) { console.log('checks', e); } }
+    if (this.env.BOT_TOKEN) { try { await this.gwEnsure(); await this.seasonCheck(); await this.recapCheck(); await this.eventsCheck(); await this.welcomeCheck(); } catch (e) { console.log('checks', e); } }
     await this.ctx.storage.setAlarm(Date.now() + (this.sockets().length ? 30000 : 60000));
     this.save();
   }
@@ -314,14 +315,15 @@ export class House extends DurableObject {
         return;
       }
       case 'move': {
-        if (!(ROOMS.includes(m.room) || (m.room === 'team' && p.team)) || m.room === a.room) return;
+        const isV = typeof m.room === 'string' && m.room.startsWith('v:') && (() => { const c = this.srv().ch[m.room.slice(2)]; return c && c.type === 2 && c.pub; })();
+        if (!(ROOMS.includes(m.room) || isV || (m.room === 'team' && p.team)) || m.room === a.room) return;
         const from = a.room; setRoom(m.room);
         { this.dailyOf(p); const v = p.daily.v || (p.daily.v = []); if (!v.includes(m.room)) { v.push(m.room); this.progress(p, 'visit'); } }
         if (m.follow && !m.srv && this.vcSeen[a.id]) { // le jeu déplace aussi le vocal Discord
           const vch = await this.voiceForRoom(m.room, p);
           if (vch && vch !== this.vcSeen[a.id]) { const ok = await this.discord('PATCH', `/guilds/${this.env.GUILD_ID}/members/${a.id}`, { channel_id: vch }); if (ok) this.vcSeen[a.id] = vch; }
         }
-        const rn = r => r === 'team' ? (this.world.teams[p.team]?.name || 'salon privé') : ROOM_NAME[r];
+        const rn = r => r === 'team' ? (this.world.teams[p.team]?.name || 'salon privé') : r && r.startsWith('v:') ? '🔊 ' + ((this.srv().ch[r.slice(2)] || {}).name || 'vocal') : ROOM_NAME[r];
         if (m.room !== 'team' && from !== 'team') { this.log('leave', p.name, 'a quitté', rn(from)); this.log('join', p.name, 'a rejoint', rn(m.room)); }
         else if (m.room === 'team') this.log('team', p.name, `entre dans 🔒 ${rn('team')}`);
         this.bcast({ t: 'pres', online: this.online() }); return;
@@ -909,3 +911,4 @@ export class House extends DurableObject {
     this.bcast({ t: 'click', c: this.clickView() });
   }
 }
+installGateway(House);

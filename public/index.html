@@ -470,6 +470,14 @@ const myRoom=()=>(ONLINE[ME]||{}).room||'garage';
 const roomName=k=>k==='team'?(myTeam()?myTeam().name:'salon privé'):ROOMS[k].name;
 const visibleIn=(id,k)=>{const o=ONLINE[id];if(!o||o.room!==k)return false;if(k==='team'){const p=PROF[id];return p&&p.team&&p.team===me().team}return true};
 const inRoom=k=>Object.keys(ONLINE).filter(id=>visibleIn(id,k)).map(id=>PROF[id]).filter(Boolean);
+// ---- vue du serveur Discord (vocal en direct, messages, salons)
+let SRV={ch:[],voice:{},mem:{},pres:{},last:{}};const GHOST={};const THEMES=['garage','gaming','chill','studio','arcade','afk'];
+function chById(id){return SRV.ch.find(c=>c.id===id)}
+function roomOfCh(id,team){if(team)return me()&&me().team===team?'team':null;const c=chById(id);if(!c||c.type!==2)return null;const n=c.name.toLowerCase();for(const r of THEMES)if(n.includes(r))return r;return 'v:'+c.id}
+function ghostsIn(k){const out=[];for(const[id,v]of Object.entries(SRV.voice||{})){if(!v||ONLINE[id])continue;if(roomOfCh(v.ch,v.team)!==k)continue;const m=SRV.mem[id]||PROF[id];if(!m)continue;const g=GHOST[id]||(GHOST[id]={});Object.assign(g,{id,name:m.name,avatar:m.avatar,ghost:true,mute:v.mute,deaf:v.deaf,acc:null,lvl:(PROF[id]||{}).lvl});out.push(g)}return out}
+const roomPeople=k=>inRoom(k).concat(ghostsIn(k));
+function personVisible(id){if(visibleIn(id,cur))return PROF[id];const g=GHOST[id];return g&&ghostsIn(cur).includes(g)?g:null}
+const autoPlay=id=>{const p=(SRV.pres||{})[id];return p&&(p.k===0||p.k===1)?p.g:null};
 const ROLES=[[1,'🌱 Nouveau'],[2,'🌱 Membre'],[3,'🏎️ Pilote'],[4,'🎧 DJ'],[5,'🗣️ Crieur officiel'],[7,'🕹️ Champion arcade'],[10,'👑 Légende']];
 const roleOf=l=>ROLES.filter(r=>r[0]<=l).pop()[1];
 
@@ -494,16 +502,18 @@ function drawAvatar(p,x,y,z,t){
   ctx.save();
   if(speaking){ctx.beginPath();ctx.arc(px,py,R+6,0,7);ctx.strokeStyle='#3bd16f';ctx.lineWidth=4;ctx.shadowColor='#3bd16f';ctx.shadowBlur=16;ctx.stroke();ctx.shadowBlur=0}
   else{ctx.beginPath();ctx.arc(px,py,R+4,0,7);ctx.fillStyle=tm?tm.col:'#120a26';ctx.fill()}
+  if(p.ghost){ctx.globalAlpha=.88;ctx.setLineDash([6,5]);ctx.beginPath();ctx.arc(px,py,R+5,0,7);ctx.strokeStyle='#8ea1ff';ctx.lineWidth=3;ctx.stroke();ctx.setLineDash([])}
   drawPortrait(ctx,p,px,py,R,afk);
+  if(p.ghost){ctx.font='20px system-ui';ctx.fillText(p.deaf?'🔇':p.mute?'🎙️':'🎧',px-R-6,py+R*.95);ctx.globalAlpha=1}
   if(afk){for(let i=0;i<3;i++){const ph=(t*.6+i/3)%1;ctx.font=`900 ${18+ph*12}px system-ui`;ctx.fillStyle=`rgba(201,210,255,${1-Math.abs(ph-.5)*2})`;ctx.fillText('z',px+18+ph*32,py-12-ph*58)}}
   if(W.teams[p.id]){ctx.font='20px system-ui';ctx.fillText('⭐',px+R*.45,py+R*.95)}
-  ctx.font='800 19px system-ui';const isMe=p.id===ME;const nm=p.name+(isMe?' (toi)':'');const tw=ctx.measureText(nm).width;const ny=py-R-(p.acc==='crown'?54:40);
+  ctx.font='800 19px system-ui';const isMe=p.id===ME;const nm=p.name+(isMe?' (toi)':'')+(p.ghost?' · vocal':'');const tw=ctx.measureText(nm).width;const ny=py-R-(p.acc==='crown'?54:40);
   const lg=ctx.createLinearGradient(0,ny,0,ny+26);if(isMe){lg.addColorStop(0,'#7b6bff');lg.addColorStop(1,'#5865f2')}else{lg.addColorStop(0,'#241a44');lg.addColorStop(1,'#140c2c')}
   ctx.fillStyle=lg;rr(px-tw/2-10,ny,tw+20,27,13);ctx.fill();if(tm){ctx.strokeStyle=tm.col;ctx.lineWidth=2;ctx.stroke()}ctx.fillStyle='#fff';ctx.fillText(nm,px-tw/2,ny+20);
-  if(cur==='gaming'&&p.playing){ctx.font='800 15px system-ui';const gt='🎮 '+p.playing.g,gw=ctx.measureText(gt).width;ctx.fillStyle='rgba(8,20,48,.92)';rr(px-gw/2-9,py+R+8,gw+18,24,12);ctx.fill();ctx.strokeStyle='#4fe3ff';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#bff4ff';ctx.fillText(gt,px-gw/2,py+R+25)}
+  const plg=(p.playing&&p.playing.g)||autoPlay(p.id);if(plg&&(cur==='gaming'||!p.playing)){ctx.font='800 15px system-ui';const gt='🎮 '+plg,gw=ctx.measureText(gt).width;ctx.fillStyle='rgba(8,20,48,.92)';rr(px-gw/2-9,py+R+8,gw+18,24,12);ctx.fill();ctx.strokeStyle='#4fe3ff';ctx.lineWidth=2;ctx.stroke();ctx.fillStyle='#bff4ff';ctx.fillText(gt,px-gw/2,py+R+25)}
   ctx.restore();p._px=px;p._py=py;p._ny=ny}
 // ---------------------------------------------------------------- salle gaming : à quoi on joue
-function gamesNow(){const m={};Object.keys(ONLINE).forEach(id=>{const p=PROF[id];if(p&&p.playing)(m[p.playing.g]=m[p.playing.g]||[]).push(p.name)});return Object.entries(m).sort((a,b)=>b[1].length-a[1].length)}
+function gamesNow(){const m={};Object.keys(ONLINE).forEach(id=>{const p=PROF[id];const g=p&&((p.playing&&p.playing.g)||autoPlay(id));if(g)(m[g]=m[g]||[]).push(p.name)});return Object.entries(m).sort((a,b)=>b[1].length-a[1].length)}
 function screenText(x,z,lines,col,t){const p=P(x,0.02,z);ctx.save();ctx.setTransform(.866,.5,0,1,p[0],p[1]);ctx.textAlign='center';ctx.shadowColor=col;ctx.shadowBlur=10;
   lines.forEach((l,i)=>{ctx.font=`900 ${i?22:15}px system-ui`;ctx.fillStyle=i?'#fff':col;ctx.fillText(l.length>13?l.slice(0,12)+'…':l,0,i*26)});ctx.restore()}
 {const _dg=DYN.gaming;DYN.gaming=function(t){_dg(t);const g=gamesNow();
@@ -609,8 +619,8 @@ function drawCat(t){if(t-cat.t0>cat.dur)catNext(t);const k=Math.min(1,(t-cat.t0)
 {const _dc=DYN.chill;DYN.chill=function(t){_dc(t);const dt=Math.min(.1,t-(DYN.chill.lt||t));DYN.chill.lt=t;GLASS.forEach(g=>{g.lv=Math.max(0,g.lv-dt*.011)});
   if(lola.ph==='idle'&&t-lola.last>25&&GLASS.filter(g=>g.lv<.2).length>=3)lolaCall();
   GLASS.forEach(g=>drawGlass(g,t));drawLola(t)}}
-function drawBubbles(t){for(let i=bubbles.length-1;i>=0;i--){const b=bubbles[i],age=t-b.t0,p=PROF[b.id];if(age>4.5||!p||!visibleIn(b.id,cur)){bubbles.splice(i,1);continue}if(p._px==null)continue;
-  const a=Math.min(1,age/.2)*(1-Math.max(0,(age-4.1)/.4));ctx.save();ctx.globalAlpha=a;ctx.font='700 19px system-ui';const txt=b.text.length>36?b.text.slice(0,35)+'…':b.text;const tw=ctx.measureText(txt).width;const x=Math.max(tw/2+18,Math.min(1000-tw/2-18,p._px)),y=p._ny-26;
+function drawBubbles(t){for(let i=bubbles.length-1;i>=0;i--){const b=bubbles[i],age=t-b.t0,p=personVisible(b.id);if(age>(b.long?7:4.5)||!p){bubbles.splice(i,1);continue}if(p._px==null)continue;
+  const a=Math.min(1,age/.2)*(1-Math.max(0,(age-4.1)/.4));ctx.save();ctx.globalAlpha=a;ctx.font='700 19px system-ui';const txt=b.text.length>44?b.text.slice(0,43)+'…':b.text;const tw=ctx.measureText(txt).width;const x=Math.max(tw/2+18,Math.min(1000-tw/2-18,p._px)),y=p._ny-26;
   ctx.fillStyle='#fff';ctx.shadowColor='rgba(0,0,0,.4)';ctx.shadowBlur=12;rr(x-tw/2-14,y-26,tw+28,38,16);ctx.fill();ctx.shadowBlur=0;ctx.beginPath();ctx.moveTo(p._px-8,y+11);ctx.lineTo(p._px+8,y+11);ctx.lineTo(p._px,y+22);ctx.fill();ctx.fillStyle='#1b1430';ctx.fillText(txt,x-tw/2,y);ctx.restore()}}
 function drawParts(t){
   for(let i=parts.length-1;i>=0;i--){const q=parts[i],age=t-q.t0,p=PROF[q.id];if(age>1.4||!p||p._px==null||!visibleIn(q.id,cur)){parts.splice(i,1);continue}
@@ -635,7 +645,7 @@ function frame(){
   drawAmbience(V,t);
   if(CARLABELS.length)CARLABELS.splice(0).forEach(f=>f());
   const R=ROOMS[V],ppl=inRoom(V);
-  ppl.map((p,i)=>({p,s:R.spots[i%R.spots.length],o:Math.floor(i/R.spots.length)})).sort((a,b)=>(a.s[0]+a.s[1])-(b.s[0]+b.s[1])).forEach(({p,s,o})=>drawAvatar(p,s[0]+o*.6,s[1]+o*.6,s[2],t));
+  ppl.push(...ghostsIn(V));ppl.map((p,i)=>({p,s:R.spots[i%R.spots.length],o:Math.floor(i/R.spots.length)})).sort((a,b)=>(a.s[0]+a.s[1])-(b.s[0]+b.s[1])).forEach(({p,s,o})=>drawAvatar(p,s[0]+o*.6,s[1]+o*.6,s[2],t));
   if(!ppl.length){ctx.font='800 26px system-ui';ctx.fillStyle='rgba(255,255,255,.55)';ctx.textAlign='center';ctx.fillText('Personne ici pour l\'instant',500,900);ctx.textAlign='left'}
   drawParts(t);drawBubbles(t);
   const v=ctx.createRadialGradient(500,500,380,500,500,760);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.55)');ctx.fillStyle=v;ctx.fillRect(0,0,1000,1000);
@@ -680,11 +690,12 @@ function addFeed(f,quiet){const [c,ic]=ICONS[f.k]||ICONS.info;const d=document.c
 let toastT;function toast(s){const e=$('#toast');e.textContent=s;e.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>e.classList.remove('show'),2600)}
 function updHeader(){const p=me();$('#lvlTxt').textContent='Niv. '+p.lvl;$('#xpFill').style.width=(100*p.xp/(100*p.lvl))+'%';$('#roleChip').textContent=roleOf(p.lvl);$('#coins').textContent=p.coins;
   $('#voiceTime').textContent=`⏱ ${Math.floor((p.voiceSec||0)/60)} min en vocal`;const n=Object.keys(ONLINE).length;$('#online').textContent=`${n} en ligne · ${Object.keys(PROF).length} membres`}
-function tabsList(){const l=['garage','gaming','chill','studio','arcade','afk'];if(myTeam())l.splice(5,0,'team');return l}
-function renderTabs(){const el=$('#tabs');el.innerHTML='';tabsList().forEach(k=>{const b=document.createElement('button');b.className='tab'+(k===cur?' on':'')+(k===myRoom()?' here':'');const R=ROOMS[k];b.innerHTML=`${R.emo} ${esc(roomName(k))}<span>${inRoom(k).length}</span>`;b.onclick=()=>goRoom(k);el.appendChild(b)});
-  $('#hudRoom').textContent=roomName(cur);$('#hudCount').textContent=inRoom(cur).length+' ici';$('#chatIn').placeholder=`Écris dans #${roomName(cur)}…`;renderMembers();updHeader()}
-function renderMembers(){const el=$('#members');const ppl=inRoom(cur);$('#memCount').textContent=ppl.length;el.innerHTML=ppl.length?'':'<span class="mut">Personne dans ce salon.</span>';const t=now();
-  ppl.forEach(p=>{const d=document.createElement('div');d.className='mem'+((lastSpeak[p.id]||0)>t?' sp':'');d.innerHTML=`<img class="av" src="${avatarSrc(p)}" alt="">${esc(p.name)}${p.id===ME?' (toi)':''}${W.teams[p.id]?' ⭐':''}`;d.onclick=()=>profile(p.id);el.appendChild(d)})}
+function tabsList(){const l=['garage','gaming','chill','studio','arcade','afk'];if(myTeam())l.splice(5,0,'team');l.splice(l.indexOf('afk'),0,...Object.keys(ROOMS).filter(k=>k.startsWith('v:')));return l}
+function renderTabs(){const el=$('#tabs');el.innerHTML='';tabsList().forEach(k=>{const b=document.createElement('button');b.className='tab'+(k===cur?' on':'')+(k===myRoom()?' here':'');const R=ROOMS[k];b.innerHTML=`${R.emo} ${esc(roomName(k))}<span>${roomPeople(k).length}</span>`;b.onclick=()=>goRoom(k);el.appendChild(b)});
+  $('#hudRoom').textContent=roomName(cur);$('#hudCount').textContent=roomPeople(cur).length+' ici';$('#chatIn').placeholder=`Écris dans #${roomName(cur)}…`;renderMembers();updHeader()}
+function renderMembers(){const el=$('#members');const ppl=inRoom(cur);$('#memCount').textContent=ppl.length+ghostsIn(cur).length;el.innerHTML=ppl.length?'':'<span class="mut">Personne dans ce salon.</span>';const t=now();
+  ppl.forEach(p=>{const d=document.createElement('div');d.className='mem'+((lastSpeak[p.id]||0)>t?' sp':'');d.innerHTML=`<img class="av" src="${avatarSrc(p)}" alt="">${esc(p.name)}${p.id===ME?' (toi)':''}${W.teams[p.id]?' ⭐':''}`;d.onclick=()=>profile(p.id);el.appendChild(d)});
+  ghostsIn(cur).forEach(g=>{const d=document.createElement('div');d.className='mem';d.style.opacity=.8;d.title='En vocal sur Discord (pas encore dans Discolife)';d.innerHTML=`<img class="av" src="${avatarSrc(g)}" alt="">${esc(g.name)} ${g.deaf?'🔇':g.mute?'🎙️':'🎧'}`;el.appendChild(d)});if(!ppl.length&&ghostsIn(cur).length)el.querySelector('.mut')?.remove()}
 setInterval(()=>{if(PROF[ME])renderMembers()},800);
 function renderLB(){const all=Object.values(PROF).sort((a,b)=>b.lvl-a.lvl||b.xp-a.xp).slice(0,10);
   $('#lb').innerHTML=all.map((r,i)=>`<div class="${r.id===ME?'me':''}" data-id="${r.id}"><span class="rk">${['🥇','🥈','🥉'][i]||i+1}</span><img class="av" src="${avatarSrc(r)}" alt=""><span>${esc(r.name)}${ONLINE[r.id]?' <i class="dot"></i>':''}</span><span class="mut" style="margin-left:auto">Niv. ${r.lvl}</span></div>`).join('')||'<span class="mut">Personne encore.</span>';
@@ -722,7 +733,8 @@ function roomSound(k){if(sndMute)return;try{const n=(m,d,ty,v,t0)=>tone(440*Math
   else if(k==='studio'){noise(.25,.15,0);tone(900,.25,'sawtooth',.05,0,200);tone(200,.2,'sawtooth',.05,.25,900);tone(150,.18,'sine',.4,.6,50);noise(.12,.22,.85);tone(150,.18,'sine',.4,1.1,50);noise(.12,.22,1.35)}
   else if(k==='arcade'){tone(988,.08,'square',.06);tone(1319,.3,'square',.06,.08);[72,76,79,76,79,84].forEach((m,i)=>n(m,.11,'square',.05,.5+i*.11))}
   else if(k==='team'){noise(.05,.3,0);tone(1800,.05,'square',.05,.02);[67,72,76].forEach((m,i)=>n(m,.25,'triangle',.08,.3+i*.15));n(79,.9,'triangle',.09,.75);n(84,.9,'sine',.04,.75)}
-  else if(k==='afk'){[79,76,72,67].forEach((m,i)=>n(m,1.4,'sine',.05,i*.45));n(55,2.6,'triangle',.03,0)}}catch(e){}}
+  else if(k==='afk'){[79,76,72,67].forEach((m,i)=>n(m,1.4,'sine',.05,i*.45));n(55,2.6,'triangle',.03,0)}
+  else if(k.startsWith('v:')){[64,71,76].forEach((m,i)=>n(m,.6,'triangle',.05,i*.12));noise(.3,.05,0)}}catch(e){}}
 let audioOn=false,aTimer=null;
 function toggleAudio(){try{const a=AC();if(audioOn){clearInterval(aTimer);audioOn=false;return}audioOn=true;let step=0;const beat=60/86;const chords=[[57,60,64,67],[53,57,60,64],[48,52,55,59],[55,59,62,65]];
   const tick=()=>{const bar=Math.floor(step/8)%4;if(step%8===0)chords[bar].forEach(n=>{const t=a.currentTime+.05,o=a.createOscillator(),g=a.createGain();o.type='triangle';o.frequency.value=440*Math.pow(2,(n-69)/12);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.04,t+.2);g.gain.exponentialRampToValueAtTime(.001,t+beat*4);o.connect(g).connect(a.destination);o.start(t);o.stop(t+beat*4)});
@@ -776,6 +788,8 @@ p.querySelectorAll('.sw').forEach(s=>s.onclick=()=>{carSel.col=s.dataset.c;rende
     $('#g1').onclick=duelPicker;$('#g2').onclick=()=>{send({t:'race'});openRace()};$('#g3').onclick=()=>{send({t:'click'});openClick()}}
   else if(k==='team'){const tm=myTeam();p.innerHTML=tm?`<div class="card"><h3>🔒 ${esc(tm.name)} <span class="r mut">${tm.score} pts</span></h3><div class="mut" style="margin-bottom:8px">Salon privé de l'équipe de ⭐ ${esc(tm.vipName)}. Seuls les membres de l'équipe le voient.</div><div class="mut" style="margin-bottom:8px">🏆 ${seasonTxt()}</div><div class="members">${tm.members.map(id=>PROF[id]).filter(Boolean).map(x=>`<div class="mem" data-id="${x.id}"><img class="av" src="${avatarSrc(x)}" alt="">${esc(x.name)}${x.id===tm.vip?' ⭐':''}${ONLINE[x.id]?' <i class="dot"></i>':''}</div>`).join('')}</div></div>`:'';
     p.querySelectorAll('[data-id]').forEach(d=>d.onclick=()=>profile(d.dataset.id))}
+  else if(k.startsWith('v:')){const c=chById(k.slice(2)),g=ghostsIn(k),pl=inRoom(k);p.innerHTML=`<div class="card"><h3>🔊 ${esc(c?c.name:'vocal')} <span class="r mut">salon vocal Discord</span></h3><div class="mut" style="margin-bottom:8px">Ce salon suit le vrai salon vocal du serveur : les membres en vocal y apparaissent en direct, même sans Discolife.</div>
+      <div class="members">${pl.map(x=>`<div class="mem"><img class="av" src="${avatarSrc(x)}" alt="">${esc(x.name)} 🏠</div>`).join('')}${g.map(x=>`<div class="mem" style="opacity:.8"><img class="av" src="${avatarSrc(x)}" alt="">${esc(x.name)} ${x.deaf?'🔇':x.mute?'🎙️':'🎧'}</div>`).join('')||(pl.length?'':'<span class="mut">Personne en vocal ici pour l\'instant.</span>')}</div></div>`}
   else if(k==='afk'){p.innerHTML=`<div class="card"><h3>💤 AFK</h3><div class="row"><button class="btn" id="slp">${myRoom()==='afk'?'⏰ Se réveiller':'😴 Partir AFK'}</button><button class="btn pri" id="ssB">🖥️ Écran de veille</button></div><div class="mut" style="margin-top:8px">En AFK, tu ne gagnes plus de 🪙. Après 10 min sans rien faire, tu y es envoyé tout seul et l'écran de veille se lance.</div></div>`;
     $('#slp').onclick=()=>goRoom(myRoom()==='afk'?'chill':'afk');$('#ssB').onclick=()=>{const back=myRoom()==='afk'?'chill':myRoom();if(myRoom()!=='afk')goRoom('afk');ssArm=Date.now();ssStart(back)}}
   const np=$('#npP');if(np&&W.np)np.style.width=Math.min(100,(Date.now()-W.np.t0+clockSkew)/600)+'%'}
@@ -892,7 +906,7 @@ function drawClick(){if(!clickOpen)return;const c=games.click;if(c&&c.id!==lastC
 // ---------------------------------------------------------------- réseau
 function onMsg(m){const t=now();
   switch(m.t){
-    case 'init':ME=m.me;PROF=m.profiles;ONLINE=m.online;Object.assign(W,{boost:m.boost,season:m.season,cv:m.cv||{},champs:m.champs||[]});setTimeout(()=>{updBoost();updDaily()},50);Object.assign(W,{queue:m.queue,np:m.np,poll:m.poll,starboard:m.starboard,records:m.records,teams:m.teams||{}});SHOPDEF=m.shop;BADGEDEF=m.badges;clockSkew=m.now-Date.now();games=m.games||games;
+    case 'init':ME=m.me;PROF=m.profiles;ONLINE=m.online;if(m.srv){SRV=m.srv;ensureVRooms()}Object.assign(W,{boost:m.boost,season:m.season,cv:m.cv||{},champs:m.champs||[]});setTimeout(()=>{updBoost();updDaily()},50);Object.assign(W,{queue:m.queue,np:m.np,poll:m.poll,starboard:m.starboard,records:m.records,teams:m.teams||{}});SHOPDEF=m.shop;BADGEDEF=m.badges;clockSkew=m.now-Date.now();games=m.games||games;
       feedEl.innerHTML='';(m.feed||[]).forEach(f=>addFeed(f,true));$('#gate').style.display='none';cur=myRoom();renderTabs();renderPanel();renderLB();if(m.invite)showInvite(m.invite);if(inDiscord&&sdk&&sdk.channelId)send({t:'vc',id:sdk.channelId});if(!inDiscord&&vsync)setTimeout(()=>send({t:'vpoll'}),800);if(cur==='afk')ssStart('chill');else intro={k:cur,t0:now(),seed:1};break;
     case 'pres':{const before=myRoom();ONLINE=m.online;if(!visibleIn(ME,'team')&&cur==='team'&&!myTeam())switchView('garage');renderTabs();renderLB();if(cur==='arcade'||cur==='garage')renderPanel();break}
     case 'prof':{const old=PROF[m.p.id];PROF[m.p.id]=m.p;if(m.drop)dropT[m.drop]=t;if(m.p.id===ME){updHeader();updDaily();if(modalKind==='shop')shop();if(!myTeam()&&cur==='team')switchView('garage')}
@@ -905,6 +919,11 @@ function onMsg(m){const t=now();
     case 'star':{const d=feedEl.querySelector(`[data-fid="${m.fid}"] .star`);if(d){d.textContent='★ '+m.n;d.classList.add('on')}break}
     case 'toast':toast(m.text);break;
     case 'boom':boom();sfx('coin');break;
+    case 'srv':SRV=m.s;ensureVRooms();renderTabs();renderSrvCard();if(modalKind==='plan')plan();break;
+    case 'sv':Object.assign(SRV.mem,m.mem||{});for(const[k,v]of Object.entries(m.voice||{})){if(v)SRV.voice[k]=v;else delete SRV.voice[k]}for(const[k,v]of Object.entries(m.pres||{})){if(v)SRV.pres[k]=v;else delete SRV.pres[k]}renderTabs();if(modalKind==='plan')plan();if(cur.startsWith('v:'))renderPanel();break;
+    case 'dmsg':{const x=m.m;(SRV.last[x.ch]=SRV.last[x.ch]||[]).push(x);if(SRV.last[x.ch].length>6)SRV.last[x.ch].shift();if(!SRV.mem[x.uid])SRV.mem[x.uid]={id:x.uid,name:x.n,avatar:x.av};
+      bubbles.push({id:x.uid,text:`#${x.chn} · ${x.text}`,t0:now(),long:true});lastSpeak[x.uid]=now()+1.5;renderSrvCard();if(modalKind==='plan')plan();break}
+    case 'vfollow':if(!inDiscord&&vsync&&m.room&&m.room!==myRoom()&&(ROOMS[m.room]||m.room==='team')){send({t:'move',room:m.room});if(SS)SS.back=m.room;else switchView(m.room);toast(`🔊 Tu as changé de vocal → ${roomName(m.room)}`)}break;
     case 'banner':showBanner(m.text,m.by);break;
     case 'goto':if(SS)SS.back=m.room;else if(cur!==m.room)switchView(m.room);if(m.voice)toast(`🔊 Tu as changé de vocal → ${m.room==='team'&&myTeam()?myTeam().name:ROOMS[m.room].name}`);break;
     case 'serve':lolaCall({d:m.d,by:m.by});break;
@@ -967,6 +986,32 @@ bossB.onclick=boss;
 const bannerEl=document.createElement('div');bannerEl.id='banner';document.body.appendChild(bannerEl);
 function showBanner(text,by){bannerEl.innerHTML=`<b>📢 ${esc(by)}</b><span>${esc(text)}</span>`;bannerEl.classList.add('on');sfx('coin');clearTimeout(bannerEl._t);bannerEl._t=setTimeout(()=>bannerEl.classList.remove('on'),9000)}
 {const st=document.createElement('style');st.textContent=`#banner{position:fixed;left:50%;top:14px;transform:translate(-50%,-140%);z-index:60;background:linear-gradient(90deg,#7b6bff,#ff4fa8);color:#fff;padding:12px 20px;border-radius:16px;box-shadow:0 10px 40px #0008;display:flex;flex-direction:column;gap:2px;max-width:min(92vw,560px);transition:transform .5s cubic-bezier(.2,1.4,.4,1)}#banner.on{transform:translate(-50%,0)}#banner span{font-size:15px}`;document.head.appendChild(st)}
+// ---------------------------------------------------------------- salons vocaux en plus = pièces générées
+const VPAL=[['#0e1a2e','#1a2c4a','#22385e','#1c3152','#5aa0ff',['#5aa0ff','#3bd16f','#ffd84a']],['#1e0e2a','#34204a','#432a5e','#3a2452','#c86bff',['#c86bff','#4fe3ff','#ff4fa8']],['#0e2420','#1a3a34','#22483f','#1d4038','#3bd1a0',['#3bd1a0','#ffd84a','#4fe3ff']],['#2a1a0e','#4a321a','#5e3f22','#52361d','#ffb84f',['#ffb84f','#ff4fa8','#ffd84a']]];
+function ensureVRooms(){const want=new Set();for(const c of SRV.ch||[]){if(c.type!==2)continue;const k=roomOfCh(c.id);if(!k||!k.startsWith('v:'))continue;want.add(k);
+    let h=0;for(const ch of c.id)h=(h*31+ch.charCodeAt(0))>>>0;const pal=VPAL[h%VPAL.length];
+    ROOMS[k]={name:c.name,emo:'🔊',bg:pal[0],floor:pal[1],wl:pal[2],wr:pal[3],top:pal[4],neon:pal[5],spots:[[2.0,2.2,1.5],[4.4,1.9,1.5],[6.6,2.4,1.5],[2.2,4.8,1.45],[6.4,5.0,1.45],[4.4,6.6,1.4],[2.4,7.2,1.4],[6.8,7.2,1.4]]};
+    if(!STATIC[k]){const nm=c.name,pc=pal[4];STATIC[k]=function(){poly([[2.6,2.6,.01],[6.4,2.6,.01],[6.4,6.4,.01],[2.6,6.4,.01]],shade(pc,.35));line([[2.6,2.6,.02],[6.4,2.6,.02],[6.4,6.4,.02],[2.6,6.4,.02],[2.6,2.6,.02]],pc,3,14);
+      cyl(4.5,4.5,0,.5,1.1,shade(pc,.5));cyl(4.5,4.5,.5,.06,1.2,shade(pc,.8));line([[4.5,4.5,.56],[4.5,4.5,1.6]],'#cfd3e2',4);cyl(4.5,4.5,1.6,.16,.14,'#2a2636');
+      plant(8.2,.9,1.3);plant(.9,8.2,1.2);box(7.6,7.2,0,1,1,.5,shade(pc,.4),shade(pc,.7));wallText(('#'+nm).toLowerCase().replace(/\s+/g,'-').slice(0,16),pc,3.4,2.5,50)};
+      DYN[k]=function(t){const g=mix(pc,'#ffffff',.25+.25*Math.sin(t*2));glowQ([[4.2,4.2,1.7],[4.8,4.2,1.7],[4.8,4.8,1.7],[4.2,4.8,1.7]],g,20);
+        const n=ghostsIn(k).length+inRoom(k).length;for(let i=0;i<Math.min(6,n*2);i++){const ph=(t*.7+i/6)%1,a=i/6*Math.PI*2+t*.4,q=P(4.5+Math.cos(a)*(.6+ph),4.5+Math.sin(a)*(.6+ph),1.75+ph*.8);ctx.globalAlpha=1-ph;ctx.font='18px system-ui';ctx.fillText('♪',q[0],q[1]);ctx.globalAlpha=1}}}}
+  for(const k of Object.keys(ROOMS))if(k.startsWith('v:')&&!want.has(k)){delete ROOMS[k];if(cur===k)switchView(myRoom()&&ROOMS[myRoom()]?myRoom():'garage')}}
+// carte « en direct du serveur » dans la colonne
+const srvCard=document.createElement('div');srvCard.className='card';srvCard.id='srvCard';
+{const anchor=document.getElementById('lb');const host=anchor?anchor.closest('.card'):null;if(host&&host.parentNode)host.parentNode.insertBefore(srvCard,host);}
+function renderSrvCard(){const msgs=Object.values(SRV.last||{}).flat().sort((a,b)=>b.t-a.t).slice(0,6);const nv=Object.keys(SRV.voice||{}).length;
+  srvCard.innerHTML=`<h3>📡 En direct du serveur <span class="r mut">${nv} en vocal</span></h3>${msgs.length?msgs.map(x=>`<div class="srvm"><img class="av" src="${avatarSrc({id:x.uid,avatar:x.av})}" alt=""><div><b>${esc(x.n)}</b> <span class="mut">#${esc(x.chn)}</span><div>${esc(x.text)}</div></div></div>`).join(''):'<div class="mut">Les messages des salons publics apparaissent ici et en bulles au-dessus des avatars.</div>'}<button class="btn" id="planB2" style="margin-top:8px">🗺️ Plan du serveur</button>`;
+  const b=$('#planB2');if(b)b.onclick=plan}
+{const st=document.createElement('style');st.textContent='.srvm{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid #ffffff10;font-size:13px}.srvm img{width:26px;height:26px;border-radius:50%}.srvm div div{opacity:.9;word-break:break-word}.plan{display:grid;gap:10px}.pcat{font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.6;margin:8px 0 2px}.pch{background:#ffffff0a;border:1px solid #ffffff14;border-radius:12px;padding:8px 10px;cursor:default}.pch.v{cursor:pointer}.pch.v:hover{background:#ffffff16}.pch .avs{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}.pch .avs img{width:26px;height:26px;border-radius:50%}.pch .avs img.g{outline:2px dashed #8ea1ff;opacity:.85}';document.head.appendChild(st)}
+const planB=document.createElement('button');planB.className='btn';planB.textContent='🗺️ Plan';hdr.insertBefore(planB,defB);planB.onclick=plan;
+function plan(){const ch=(SRV.ch||[]).slice().sort((a,b)=>a.pos-b.pos);const cats=ch.filter(c=>c.type===4);const groups=[{id:null,name:'Salons'}].concat(cats);
+  const voiceIn=id=>Object.entries(SRV.voice||{}).filter(([u,v])=>v&&v.ch===id).map(([u])=>({...(SRV.mem[u]||PROF[u]||{id:u,name:'?'}),id:u,on:!!ONLINE[u]}));
+  let html=`<h2>🗺️ Plan de La Maison</h2><div class="mut" style="margin-bottom:6px">Le vrai serveur Discord, en direct : ${Object.keys(SRV.voice||{}).length} en vocal · ${Object.keys(ONLINE).length} sur Discolife. Clique sur un salon vocal pour y aller.</div><div class="plan">`;
+  for(const g of groups){const items=ch.filter(c=>c.type!==4&&(c.parent||null)===g.id);if(!items.length)continue;html+=`<div class="pcat">${esc(g.name)}</div>`;
+    for(const c of items){if(c.type===2){const k=roomOfCh(c.id),ppl=voiceIn(c.id);html+=`<div class="pch v" data-room="${k||''}"><b>🔊 ${esc(c.name)}</b> ${k&&ROOMS[k]?`<span class="mut">→ pièce ${esc(roomName(k))}</span>`:''}<div class="avs">${ppl.map(x=>`<img class="${x.on?'':'g'}" title="${esc(x.name)}${x.on?' · sur Discolife':' · en vocal'}" src="${avatarSrc(x)}" alt="">`).join('')||'<span class="mut">vide</span>'}</div></div>`}
+      else{const l=(SRV.last||{})[c.id]||[],x=l[l.length-1];html+=`<div class="pch"><b>#️⃣ ${esc(c.name)}</b>${x?`<div class="mut" style="margin-top:4px"><b>${esc(x.n)}</b> : ${esc(x.text)}</div>`:''}</div>`}}}
+  html+='</div>';openM(html,'plan');mbox.querySelectorAll('.pch.v').forEach(e=>e.onclick=()=>{const k=e.dataset.room;if(k&&ROOMS[k]){closeM();goRoom(k)}})}
 // ---------------------------------------------------------------- ambiance : jour/nuit, météo, fêtes
 function parisNow(){const s=new Date().toLocaleString('en-US',{timeZone:'Europe/Paris'});return new Date(s)}
 let AMB={t:-99};
@@ -985,7 +1030,7 @@ function drawAmbience(V,t){const A=ambState(t);if(V==='afk')return;
 function drawWeather(V,t){const A=ambState(t);if(V==='afk')return;
   if(A.rain){ctx.save();ctx.strokeStyle='rgba(170,200,255,.35)';ctx.lineWidth=1.5;ctx.beginPath();for(let i=0;i<90;i++){const x=(i*97+t*260)%1100-50,y=(i*173+t*900)%1000;ctx.moveTo(x,y);ctx.lineTo(x-7,y+22)}ctx.stroke();ctx.restore()}
   if(A.snow){ctx.save();ctx.fillStyle='rgba(255,255,255,.85)';FLAKES.forEach(f=>{const y=(f.y+t*30*f.s)%1000,x=(f.x+Math.sin(t+f.o)*20)%1000;ctx.globalAlpha=.4+.5*f.s;ctx.beginPath();ctx.arc(x,y,1.5+f.s*2,0,7);ctx.fill()});ctx.restore()}}
-if(/^(localhost|127\.)/.test(location.hostname))window.__dl={PROF:()=>PROF,lola:()=>lolaCall({d:'mojito',by:'Test'}),cat:ph=>{cat={...cat,ph,t0:now(),dur:30,from:CATBED,to:CATBED}},amb:o=>{ambState(now());Object.assign(AMB,o,{t:1e9})}};
+if(/^(localhost|127\.)/.test(location.hostname))window.__dl={PROF:()=>PROF,lola:()=>lolaCall({d:'mojito',by:'Test'}),cat:ph=>{cat={...cat,ph,t0:now(),dur:30,from:CATBED,to:CATBED}},amb:o=>{ambState(now());Object.assign(AMB,o,{t:1e9})},srv:o=>{SRV=o;ensureVRooms();renderTabs();renderSrvCard()},dmsg:x=>onMsg({t:'dmsg',m:x})};
 frame();start();
 
 })();
