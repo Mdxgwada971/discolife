@@ -92,8 +92,10 @@ export function installGateway(House) {
       const S = this.srv(), id = p.user && p.user.id; if (!id) return false;
       const act = (p.activities || []).find(a => a.type === 0 || a.type === 1); // jeux et streams seulement (pas de Spotify)
       const v = act ? { g: act.name, k: act.type } : null;
-      const old = JSON.stringify(S.pres[id] || null); if (v) S.pres[id] = v; else delete S.pres[id];
-      return old !== JSON.stringify(v);
+      const prev = S.pres[id]; if (prev && prev.since && (!v || v.g !== prev.g)) { try { this.addGameTime(prev.g, id, Math.floor((Date.now() - prev.since) / 1000)); } catch (e) {} }
+      const changed = JSON.stringify(prev ? { g: prev.g, k: prev.k } : null) !== JSON.stringify(v);
+      if (v) S.pres[id] = changed || !prev ? { ...v, since: Date.now() } : prev; else delete S.pres[id];
+      return changed;
     },
     gwMsg(d) {
       if (d.guild_id !== this.env.GUILD_ID || !d.author || d.author.bot || d.webhook_id) return;

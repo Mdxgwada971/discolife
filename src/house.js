@@ -181,6 +181,7 @@ export class House extends DurableObject {
     if (best) f.push({ name: '⭐ Joueur de la semaine', value: `**${best.name}** · ${best.wk.xp} XP`, inline: true });
     if (car) f.push({ name: '🚗 Caisse de la semaine', value: `**${car.name}** · ${car.n} ❤️ (+50 🪙)`, inline: true });
     if (rec) f.push({ name: '⚡ Record de clic', value: `**${rec.n}** · ${rec.ms} ms`, inline: true });
+    { const G = (this.world.live && this.world.live.gwk && this.world.live.gwk.g) || {}; const top = Object.entries(G).sort((a, b) => b[1].sec - a[1].sec)[0]; if (top) f.push({ name: '🎮 Jeu de la semaine', value: `**${top[0]}** · ${Math.round(top[1].sec / 360) / 10} h`, inline: true }); }
     const motw = await this.memberOfWeek(); if (motw) f.push({ name: '🌟 Membre de la semaine', value: `**${motw.name}** · rôle spécial + 100 🪙`, inline: true });
     f.push({ name: '🏠 Discolife', value: `${P_.length} joueurs · ${P_.filter(p => p.car).length} caisses au garage`, inline: true });
     await this.discord('POST', `/channels/${this.gameChannel()}/messages`, { embeds: [{ color: 0xa66bff, title: '📰 Le récap de la semaine', description: 'Ce qui s\'est passé cette semaine dans La Maison :', fields: f, footer: { text: 'Rendez-vous dimanche prochain · Discolife' } }] });
@@ -564,7 +565,13 @@ export class House extends DurableObject {
                   { type: 7, name: 'salon', description: 'Salon vocal (par défaut : salle-gaming)', required: false, channel_types: [2] }] },
       { name: 'defis', description: 'Voir tes défis du jour Discolife', dm_permission: false },
       { name: 'test', description: 'Teste tous les réglages Discord du bot (réservé au boss)', default_member_permissions: '8', dm_permission: false,
-        options: [{ type: 3, name: 'demo', description: 'Lancer aussi une démo tout de suite', required: false, choices: [{ name: 'Quiz express', value: 'quiz' }, { name: 'Coffre surprise', value: 'coffre' }, { name: 'Question du jour', value: 'question' }, { name: 'Journal du matin', value: 'journal' }, { name: 'Bannière', value: 'banniere' }, { name: 'Salons stats', value: 'stats' }] }] },
+        options: [{ type: 3, name: 'demo', description: 'Par défaut toutes les démos sont lancées ; choisis-en une seule ou aucune', required: false, choices: [{ name: 'Quiz express', value: 'quiz' }, { name: 'Coffre surprise', value: 'coffre' }, { name: 'Question du jour', value: 'question' }, { name: 'Journal du matin', value: 'journal' }, { name: 'Bannière', value: 'banniere' }, { name: 'Salons stats', value: 'stats' }, { name: 'Aucune démo', value: 'aucune' }] }] },
+      { name: 'jeux', description: 'Les jeux les plus joués du serveur (temps de jeu)', dm_permission: false },
+      { name: 'valo', description: 'Suivi Valorant : RR gagnés et perdus annoncés après chaque ranked', dm_permission: false, options: [
+        { type: 1, name: 'lier', description: 'Lier ton compte Riot', options: [{ type: 3, name: 'riot', description: 'Ton Riot ID, ex : Kuma#EUW', required: true, max_length: 22 }, { type: 3, name: 'region', description: 'Région (eu par défaut)', required: false, choices: [{ name: 'Europe', value: 'eu' }, { name: 'Amérique du Nord', value: 'na' }, { name: 'Asie-Pacifique', value: 'ap' }, { name: 'Corée', value: 'kr' }] }] },
+        { type: 1, name: 'voir', description: 'Voir le rang d\'un membre', options: [{ type: 6, name: 'membre', description: 'Le membre', required: false }] },
+        { type: 1, name: 'classement', description: 'Classement Valorant du serveur' },
+        { type: 1, name: 'delier', description: 'Délier ton compte' }] },
       { name: 'anniv', description: 'Enregistre ton anniversaire (le serveur te le souhaitera avec un cadeau)', dm_permission: false, options: [{ type: 3, name: 'date', description: 'JJ/MM, ex : 14/03', required: true, max_length: 5 }] },
       { name: 'duel', description: 'Défie un membre aux dés, avec une mise en pièces Discolife', dm_permission: false, options: [{ ...mem }, { type: 4, name: 'mise', description: 'Pièces misées par chacun (0 à 500)', required: false, min_value: 0, max_value: 500 }] },
       { name: 'annonce-jeu', description: 'Annonce une partie à tout le serveur (notif pour tout le monde)', dm_permission: false,
@@ -605,7 +612,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v14'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } }
+  async setupCheck() { const V = 'v15'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;

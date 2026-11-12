@@ -66,6 +66,7 @@ export function installLive(House) {
       const voiceParent = (find(/garage/i, 2) || find(/g[ée]n[ée]ral/i, 2) || {}).parent_id || null;
       const textParent = (find(/mini-jeux/i, 0) || find(/g[ée]n[ée]ral/i, 0) || {}).parent_id || null;
       if (!L.countCh || !chs.some(c => c.id === L.countCh)) { const ex = find(/comptage/i, 0); const c = ex || await this.discord('POST', `/guilds/${g}/channels`, { name: '🔢・comptage', type: 0, parent_id: textParent || undefined, topic: 'Comptez ensemble : 1, 2, 3… Un nombre par message, pas deux fois de suite la même personne. Record : 0' }); if (c) L.countCh = c.id; }
+      if (!L.valoCh || !chs.some(c => c.id === L.valoCh)) { const ex = find(/valorant/i, 0); const c = ex || await this.discord('POST', `/guilds/${g}/channels`, { name: '🎯・valorant', type: 0, parent_id: textParent || undefined, topic: 'Résultats Valorant en direct : chaque victoire ou défaite classée avec les RR · /valo lier Pseudo#TAG' }); if (c) L.valoCh = c.id; }
       if (!L.createVc || !chs.some(c => c.id === L.createVc)) { const ex = find(/cr[ée]er un salon/i, 2); const c = ex || await this.discord('POST', `/guilds/${g}/channels`, { name: '➕ Créer un salon', type: 2, parent_id: voiceParent || undefined }); if (c) L.createVc = c.id; }
       if (!L.statCat || !chs.some(c => c.id === L.statCat)) {
         const cat = await this.discord('POST', `/guilds/${g}/channels`, { name: '📊 EN DIRECT', type: 4, position: 0 }); if (cat) L.statCat = cat.id; L.stat = {};
@@ -80,6 +81,10 @@ export function installLive(House) {
       if (!this.env.BOT_TOKEN) return; const L = this.L(), now = Date.now(), d = parisNow(), h = d.getHours() + d.getMinutes() / 60, today = dayKey();
       // temps de vocal
       const S = this.srv(); for (const [u, v] of Object.entries(S.voice)) { if (!v.acc) v.acc = now; const sec = Math.floor((now - v.acc) / 1000); if (sec >= 30) { v.acc = now; if (v.ch !== L.createVc && !(L.stat && Object.values(L.stat).includes(v.ch))) this.liveStat(u, 'v', sec); const p = this.profiles[u]; if (p && !this.online()[u]) p.vocSec = (p.vocSec || 0) + sec; } }
+      // temps de jeu (présences Discord)
+      for (const [u, pr] of Object.entries(S.pres)) if (pr && pr.since) { const sec = Math.floor((now - pr.since) / 1000); if (sec >= 60) { this.addGameTime(pr.g, u, sec); pr.since = now; } }
+      // suivi Valorant (RR)
+      if (this.env.HENRIK_KEY && (!L.valoT || now - L.valoT > 3 * 60e3)) { L.valoT = now; try { await this.valoPoll(); } catch (e) { console.log('valo', e); } }
       // planning du jour
       if (!L.sched || L.sched.d !== today) {
         const at = (h0, h1) => { const base = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' })); base.setHours(0, 0, 0, 0); return rndInt(h0 * 60, h1 * 60); };
@@ -213,6 +218,44 @@ export function installLive(House) {
         description: (m.content || '').slice(0, 1500) + `\n\n[➜ Voir le message](https://discord.com/channels/${this.env.GUILD_ID}/${d.channel_id}/${d.message_id})`, image: img ? { url: img.url } : undefined, footer: { text: `⭐ dans #${c.name} · ${e} ×3` } }] });
       const p = this.profiles[m.author.id]; if (p) { p.coins += 20; this.pushProf(p); }
     },
+    addGameTime(game, uid, sec) {
+      if (!game || sec <= 0 || sec > 7200) return; const L = this.L(); const G = L.games = L.games || {}; const g = G[game] = G[game] || { sec: 0, p: {} }; g.sec += sec; g.p[uid] = (g.p[uid] || 0) + sec;
+      const wk = this.weekKeyL(); if (!L.gwk || L.gwk.k !== wk) { L.lastGwk = L.gwk || null; L.gwk = { k: wk, g: {} }; } const x = L.gwk.g[game] = L.gwk.g[game] || { sec: 0, p: {} }; x.sec += sec; x.p[uid] = (x.p[uid] || 0) + sec;
+      const keys = Object.keys(G); if (keys.length > 60) { const low = keys.sort((a, b) => G[a].sec - G[b].sec)[0]; delete G[low]; }
+    },
+    gamesEmbed() {
+      const L = this.L(), nm = id => (this.srv().mem[id] || this.profiles[id] || {}).name || '?', hrs = s => s >= 3600 ? `${Math.round(s / 360) / 10} h` : `${Math.round(s / 60)} min`;
+      const fmt = G => Object.entries(G || {}).sort((a, b) => b[1].sec - a[1].sec).slice(0, 8).map(([g, x], i) => { const top = Object.entries(x.p).sort((a, b) => b[1] - a[1])[0]; return `${['🥇', '🥈', '🥉'][i] || `**${i + 1}.**`} **${g}** · ${hrs(x.sec)}${top ? ` · 👑 ${nm(top[0])}` : ''}`; }).join('\n') || '—';
+      return { embeds: [{ color: 0x4fe3ff, title: '🎮 Les jeux du serveur', fields: [{ name: 'Cette semaine', value: fmt(L.gwk && L.gwk.g) }, { name: 'Depuis le début', value: fmt(L.games) }], footer: { text: 'Temps de jeu détecté via Discord · /valo lier pour suivre tes RR' } }] };
+    },
+    // ---------------------------------------------------------------- Valorant (API HenrikDev, clé dans le secret HENRIK_KEY)
+    async valoHistory(v) {
+      const r = await fetch(`https://api.henrikdev.xyz/valorant/v2/mmr-history/${v.region}/pc/${encodeURIComponent(v.name)}/${encodeURIComponent(v.tag)}`, { headers: { Authorization: this.env.HENRIK_KEY } });
+      if (!r.ok) { console.log('valo http', r.status); return { err: r.status }; } const j = await r.json(); return { list: (j.data && j.data.history) || [] };
+    },
+    async valoPoll() {
+      const S = this.srv(), now = Date.now(); const linked = Object.values(this.profiles).filter(p => p.valo); let calls = 0;
+      for (const p of linked) {
+        const playing = Object.entries(S.pres).some(([u, pr]) => u === p.id && pr && /valorant/i.test(pr.g)); if (playing) p.valo.hot = now;
+        const due = playing || (p.valo.hot && now - p.valo.hot < 90 * 60e3) ? 3 * 60e3 : 30 * 60e3; if (p.valo.t && now - p.valo.t < due) continue; if (++calls > 12) break;
+        p.valo.t = now; const h = await this.valoHistory(p.valo); if (!h.list || !h.list.length) continue;
+        const fresh = []; for (const e of h.list) { if (e.match_id === p.valo.last) break; fresh.push(e); }
+        const top = h.list[0]; p.valo.last = top.match_id; p.valo.rank = top.tier && top.tier.name; p.valo.rr = top.rr; p.valo.elo = top.elo;
+        if (!p.valo.init) { p.valo.init = true; continue; }
+        for (const e of fresh.slice(0, 5).reverse()) await this.valoAnnounce(p, e);
+        this.pushProf(p);
+      }
+    },
+    async valoAnnounce(p, e) {
+      const ch = this.L().valoCh; if (!ch) return; const d = e.last_change || 0, win = d > 0, draw = d === 0;
+      p.coins += win ? 10 : 3; p.stats.valoW = (p.stats.valoW || 0) + (win ? 1 : 0); p.stats.valoL = (p.stats.valoL || 0) + (!win && !draw ? 1 : 0);
+      await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: win ? 0x3bd16f : draw ? 0x9aa0b8 : 0xff4655,
+        author: { name: `${p.name} · ${p.valo.name}#${p.valo.tag}`, icon_url: p.avatar ? `https://cdn.discordapp.com/avatars/${p.id}/${p.avatar}.png?size=64` : undefined },
+        title: win ? `🟢 Victoire · +${d} RR` : draw ? '⚪ Égalité · 0 RR' : `🔴 Défaite · ${d} RR`,
+        description: `**${(e.tier && e.tier.name) || '?'}** · ${e.rr ?? '?'} RR${e.map && e.map.name ? ` · 🗺️ ${e.map.name}` : ''}${e.refunded_rr ? ` · ${e.refunded_rr} RR remboursés` : ''}${e.was_derank_protected ? ' · 🛡️ protection de rang' : ''}`,
+        footer: { text: `Bilan suivi : ${p.stats.valoW || 0} V / ${p.stats.valoL || 0} D · ${win ? '+10' : '+3'} 🪙 Discolife` } }] });
+      this.log('info', p.name, win ? `gagne une ranked Valorant (+${d} RR) 🟢` : `perd une ranked Valorant (${d} RR) 🔴`, 'salle-gaming');
+    },
     react(ch, msg, emoji) { return this.discord('PUT', `/channels/${ch}/messages/${msg}/reactions/${encodeURIComponent(emoji)}/@me`); },
 
     // ---------------------------------------------------------------- membre de la semaine (appelé par le récap du dimanche)
@@ -239,7 +282,7 @@ export function installLive(House) {
       // 2. connexion en direct + commandes
       const S = this.srv(); ok('Connexion', 'Connexion en direct (gateway)', !!this.gwAlive(), this._gwDead ? 'erreur fatale : vérifier les intents du portail' : this._asleep ? 'en veille de nuit' : '');
       ok('Connexion', 'Salons reçus', Object.keys(S.ch).length > 0, Object.keys(S.ch).length + ' salons'); ok('Connexion', 'Membres reçus (intent membres)', Object.keys(S.mem).length > 0, Object.keys(S.mem).length + ' membres');
-      const cmds = await this.discord('GET', `/applications/${app}/guilds/${g}/commands`); const want = ['vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test'];
+      const cmds = await this.discord('GET', `/applications/${app}/guilds/${g}/commands`); const want = ['vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
       const miss = want.filter(n => !(cmds || []).some(c => c.name === n)); ok('Commandes', `${want.length} commandes slash`, !miss.length, miss.length ? 'manquent : ' + miss.join(', ') : '');
       // 3. salons et rôles
       const chs = await this.discord('GET', `/guilds/${g}/channels`) || []; const ex = id => id && chs.some(c => c.id === id); const byName = re => chs.find(c => re.test(c.name));
@@ -258,11 +301,14 @@ export function installLive(House) {
           ok('Actions', 'Supprimer un message', !!(await this.discord('DELETE', `/channels/${tch}/messages/${m.id}`))); }
         const vc = await this.discord('POST', `/guilds/${g}/channels`, { name: '🧪 test', type: 2, parent_id: (chs.find(c => c.id === L.createVc) || {}).parent_id || undefined }); ok('Actions', 'Créer / supprimer un salon vocal', !!vc); if (vc) await this.discord('DELETE', `/channels/${vc.id}`);
       } else ok('Actions', 'Salon de test (staff)', false, 'salon staff introuvable');
+      ok('Salons', '🎯 valorant', ex(L.valoCh)); ok('Valorant', 'Clé API HenrikDev (secret HENRIK_KEY)', !!this.env.HENRIK_KEY, this.env.HENRIK_KEY ? Object.values(this.profiles).filter(p => p.valo).length + ' comptes liés' : 'à ajouter dans Cloudflare');
+      ok('Jeux', 'Tracker de temps de jeu', true, Object.keys(L.games || {}).length + ' jeux suivis');
       ok('Site', 'Bannières en ligne', !!(await this.env.ASSETS.fetch(new Request(SITE + '/banners/day.jpg')).then(r => r.ok).catch(() => false)));
       // 5. démo à la demande
       let demoTxt = '';
-      if (demo) { const run = { quiz: () => this.postQuiz(), coffre: () => this.postDrop(), question: () => this.postQotd(), journal: () => this.postJournal(), banniere: () => { this.L().banSlot = null; return this.updateBanner(); }, stats: () => { this.L().statT = 0; return this.updateStats(); } }[demo];
-        if (run) { try { await run(); demoTxt = `\n\n🎬 Démo **${demo}** lancée.`; } catch (e) { demoTxt = `\n\n🎬 Démo **${demo}** : erreur ${e.message}`; } } }
+      const demos = !demo || demo === 'tout' ? ['stats', 'banniere', 'journal', 'question', 'quiz', 'coffre'] : demo === 'aucune' ? [] : [demo]; const done = [];
+      for (const dm of demos) { const run = { quiz: () => this.postQuiz(), coffre: () => this.postDrop(), question: () => this.postQotd(), journal: () => this.postJournal(), banniere: () => { this.L().banSlot = null; return this.updateBanner(); }, stats: () => { this.L().statT = 0; return this.updateStats(); } }[dm]; if (run) { try { await run(); done.push('✅ ' + dm); } catch (e) { done.push('❌ ' + dm + ' (' + e.message + ')'); } } }
+      if (done.length) demoTxt = `\n\n🎬 Démos lancées sur le serveur : ${done.join(' · ')}\n(stats dans 📊 EN DIRECT, bannière dans #bienvenue, journal / question / coffre dans #général, quiz dans #mini-jeux)`;
       const pass = res.filter(r => r.pass).length, secs = [...new Set(res.map(r => r.sec))];
       return { embeds: [{ color: pass === res.length ? 0x3bd16f : 0xffb84f, title: `🧪 Test du serveur : ${pass}/${res.length} OK`, description: (pass === res.length ? 'Tout fonctionne ✅' : 'Les points ❌ sont à corriger (souvent une autorisation à donner au bot).') + demoTxt,
         fields: secs.map(sec => ({ name: sec, value: res.filter(r => r.sec === sec).map(r => `${r.pass ? '✅' : '❌'} ${r.name}${r.info ? ` · ${r.info}` : ''}`).join('\n').slice(0, 1020) })) }] };
@@ -270,6 +316,22 @@ export function installLive(House) {
 
     // ---------------------------------------------------------------- interactions (boutons et commandes)
     async liveCommand(d, me, reply, opt, who, isAdm) {
+      if (d.name === 'jeux') return reply(this.gamesEmbed());
+      if (d.name === 'valo') {
+        const sub = (d.options || [])[0]; if (!sub) return reply('?'); const o = n => ((sub.options || []).find(x => x.name === n) || {}).value;
+        if (sub.name === 'lier') {
+          if (!this.env.HENRIK_KEY) return reply('⚙️ Le suivi Valorant n\'est pas encore activé : le boss doit ajouter la clé API HenrikDev (secret HENRIK_KEY).');
+          const m = String(o('riot') || '').trim().match(/^(.{2,16})#([A-Za-z0-9]{2,5})$/); if (!m) return reply('Écris ton Riot ID comme **Pseudo#TAG**.');
+          const v = { name: m[1].trim(), tag: m[2], region: o('region') || 'eu' }; const h = await this.valoHistory(v);
+          if (!h.list) return reply(h.err === 404 ? '❌ Compte introuvable (ou aucune ranked récente). Vérifie le Riot ID et la région.' : `❌ L'API Valorant ne répond pas (${h.err}). Réessaie plus tard.`);
+          const top = h.list[0]; me.valo = { ...v, last: top ? top.match_id : null, rank: top && top.tier && top.tier.name, rr: top && top.rr, elo: top && top.elo, init: true }; this.pushProf(me);
+          return reply(`🎯 Compte **${v.name}#${v.tag}** lié ! ${top ? `Rang actuel : **${top.tier.name}** · ${top.rr} RR.` : ''}\nChaque ranked gagnée ou perdue sera annoncée dans <#${this.L().valoCh}> avec les RR.`);
+        }
+        if (sub.name === 'delier') { delete me.valo; this.pushProf(me); return reply('Compte Valorant délié.'); }
+        if (sub.name === 'voir') { const t = o('membre') ? this.profiles[o('membre')] : me; if (!t || !t.valo) return reply('Aucun compte Valorant lié.');
+          return reply({ embeds: [{ color: 0xff4655, title: `🎯 ${t.name} · ${t.valo.name}#${t.valo.tag}`, description: `Rang : **${t.valo.rank || '?'}** · ${t.valo.rr ?? '?'} RR\nBilan suivi : ${t.stats.valoW || 0} victoires / ${t.stats.valoL || 0} défaites` }] }); }
+        if (sub.name === 'classement') { const l = Object.values(this.profiles).filter(p => p.valo && p.valo.rank); return reply({ embeds: [{ color: 0xff4655, title: '🎯 Classement Valorant du serveur', description: l.sort((a, b) => (b.valo.elo || 0) - (a.valo.elo || 0)).map(p => `**${p.name}** · ${p.valo.rank} · ${p.valo.rr} RR · ${p.stats.valoW || 0}V/${p.stats.valoL || 0}D`).join('\n') || 'Personne n\'a encore lié son compte (/valo lier).' }] }); }
+      }
       if (d.name === 'test') { if (!isAdm) return reply('🔒 Réservé au boss.'); return reply(await this.selfTest(opt(d, 'demo'))); }
       if (d.name === 'anniv') {
         const v = (opt(d, 'date') || '').trim(), m = v.match(/^(\d{1,2})\/(\d{1,2})$/); if (!m || +m[1] > 31 || +m[2] > 12 || +m[1] < 1 || +m[2] < 1) return reply('Date invalide : écris par exemple **14/03**.');
