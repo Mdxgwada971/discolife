@@ -88,7 +88,7 @@ export function installLive(House) {
       if (!L.createVc || !chs.some(c => c.id === L.createVc)) { const ex = find(/cr[ée]er un salon/i, 2); const c = ex || await this.discord('POST', `/guilds/${g}/channels`, { name: '➕ Créer un salon', type: 2, parent_id: voiceParent || undefined }); if (c) L.createVc = c.id; }
       if (!L.statCat || !chs.some(c => c.id === L.statCat)) {
         const cat = await this.discord('POST', `/guilds/${g}/channels`, { name: '📊 EN DIRECT', type: 4, position: 0 }); if (cat) L.statCat = cat.id; L.stat = {};
-        for (const k of ['on', 'voice', 'members']) { const c = await this.discord('POST', `/guilds/${g}/channels`, { name: k === 'on' ? '🟢 Discolife : …' : k === 'voice' ? '🔊 En vocal : …' : '👥 Membres : …', type: 2, parent_id: L.statCat, permission_overwrites: [{ id: g, type: 0, deny: String(CONNECT), allow: String(VIEW) }] }); if (c) L.stat[k] = c.id; }
+        for (const k of ['on', 'voice', 'members']) { const c = await this.discord('POST', `/guilds/${g}/channels`, { name: k === 'on' ? '🟢 Discolife : …' : k === 'voice' ? '🔊 En vocal : …' : '👥 Membres : …', type: 2, parent_id: L.statCat, permission_overwrites: [{ id: g, type: 0, deny: String(CONNECT), allow: String(VIEW) }, { id: this.env.CLIENT_ID, type: 1, allow: String(VIEW + CONNECT + (1 << 4)) }] }); if (c) L.stat[k] = c.id; }
         await this.discord('PATCH', `/guilds/${g}/channels`, [{ id: L.statCat, position: 0 }]);
       }
       this.save();
@@ -127,7 +127,22 @@ export function installLive(House) {
       const L = this.L(), S = this.srv(); let members = Object.keys(S.mem).length;
       const g = await this.discord('GET', `/guilds/${this.env.GUILD_ID}?with_counts=true`); if (g && g.approximate_member_count) members = g.approximate_member_count;
       const vals = { on: `🟢 Discolife : ${Object.keys(this.online()).length}`, voice: `🔊 En vocal : ${S.ready ? Object.values(S.voice).filter(v => v.ch !== L.createVc).length : '…'}`, members: `👥 Membres : ${members}` };
-      L.statV = L.statV || {}; for (const [k, name] of Object.entries(vals)) if (L.stat[k] && L.statV[k] !== name) { const ok = await this.discord('PATCH', `/channels/${L.stat[k]}`, { name }); if (ok) L.statV[k] = name; }
+      L.statV = L.statV || {}; let broken = 0;
+      for (const [k, name] of Object.entries(vals)) if (L.stat[k] && L.statV[k] !== name) { const ok = await this.discord('PATCH', `/channels/${L.stat[k]}`, { name }); if (ok) L.statV[k] = name; else broken++; }
+      if (broken) await this.repairStats();
+    },
+
+    // les anciens compteurs refusaient l'accès au bot (connexion interdite à @everyone) : on leur ajoute un droit pour le bot, sinon on les recrée
+    async repairStats() {
+      const L = this.L(), g = this.env.GUILD_ID, CONNECT = 1 << 20, VIEW = 1 << 10; L.statFix = (L.statFix || 0) + 1; if (L.statFix > 3) return;
+      let fixed = true;
+      for (const id of Object.values(L.stat || {})) { const ok = await this.discord('PUT', `/channels/${id}/permissions/${this.env.CLIENT_ID}`, { type: 1, allow: String(VIEW + CONNECT + (1 << 4)), deny: '0' }); if (!ok) fixed = false; }
+      if (fixed) return;
+      if (L.statCat) await this.discord('PUT', `/channels/${L.statCat}/permissions/${this.env.CLIENT_ID}`, { type: 1, allow: String(VIEW + CONNECT + (1 << 4)), deny: '0' });
+      for (const id of Object.values(L.stat || {})) await this.discord('DELETE', `/channels/${id}`);
+      L.stat = {}; L.statV = {};
+      for (const k of ['on', 'voice', 'members']) { const c = await this.discord('POST', `/guilds/${g}/channels`, { name: k === 'on' ? '🟢 Discolife : …' : k === 'voice' ? '🔊 En vocal : …' : '👥 Membres : …', type: 2, parent_id: L.statCat || undefined, permission_overwrites: [{ id: g, type: 0, deny: String(CONNECT), allow: String(VIEW) }, { id: this.env.CLIENT_ID, type: 1, allow: String(VIEW + CONNECT + (1 << 4)) }] }); if (c) L.stat[k] = c.id; }
+      L.statT = 0; this.save();
     },
 
     // ---------------------------------------------------------------- bannière dynamique au thème Discolife
@@ -230,13 +245,13 @@ export function installLive(House) {
     async liveOnReaction(d) {
       if (d.guild_id !== this.env.GUILD_ID || !d.emoji) return; const e = d.emoji.name; if (!['😂', '🤣', '⭐', '💀', '🔥', '😭'].includes(e)) return;
       const L = this.L(); if (L.starred.includes(d.message_id)) return; const S = this.srv(), c = S.ch[d.channel_id]; if (!c || !c.pub) return;
-      const k = this._rx || (this._rx = {}); const s = k[d.message_id] = k[d.message_id] || new Set(); s.add(d.user_id); if (s.size < 3) return;
+      const k = this._rx || (this._rx = {}); const s = k[d.message_id] = k[d.message_id] || new Set(); s.add(d.user_id); const need = Object.keys(S.mem).length < 10 ? 2 : 3; if (s.size < need) return;
       L.starred.push(d.message_id); if (L.starred.length > 300) L.starred.shift(); delete k[d.message_id];
       const m = await this.discord('GET', `/channels/${d.channel_id}/messages/${d.message_id}`); if (!m || m.author.bot) return;
       const star = await this.chanId(/starboard/i, 0); if (!star) return; await this.react(d.channel_id, d.message_id, '⭐');
       const img = (m.attachments || []).find(a => /^image\//.test(a.content_type || ''));
       await this.discord('POST', `/channels/${star}/messages`, { embeds: [{ color: 0xffd84a, author: { name: m.author.global_name || m.author.username, icon_url: m.author.avatar ? `https://cdn.discordapp.com/avatars/${m.author.id}/${m.author.avatar}.png?size=64` : undefined },
-        description: (m.content || '').slice(0, 1500) + `\n\n[➜ Voir le message](https://discord.com/channels/${this.env.GUILD_ID}/${d.channel_id}/${d.message_id})`, image: img ? { url: img.url } : undefined, footer: { text: `⭐ dans #${c.name} · ${e} ×3` } }] });
+        description: (m.content || '').slice(0, 1500) + `\n\n[➜ Voir le message](https://discord.com/channels/${this.env.GUILD_ID}/${d.channel_id}/${d.message_id})`, image: img ? { url: img.url } : undefined, footer: { text: `⭐ dans #${c.name} · ${e}` } }] });
       const p = this.profiles[m.author.id]; if (p) { p.coins += 20; this.pushProf(p); }
     },
     addGameTime(game, uid, sec) {
