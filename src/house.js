@@ -336,6 +336,10 @@ export class House extends DurableObject {
       { name: 'retirer', description: 'VIP : retirer un membre de ton équipe', dm_permission: false, options: [mem] },
       { name: 'equipe', description: 'VIP : renommer ton salon privé', dm_permission: false, options: [{ type: 3, name: 'nom', description: 'Nouveau nom du salon', required: true, max_length: 24 }] },
       { name: 'quitter', description: 'Quitter ton équipe', dm_permission: false },
+      { name: 'proposer-jeu', description: 'Propose un jeu au serveur : « téléchargez-le, on va bientôt y jouer »', dm_permission: false,
+        options: [{ type: 3, name: 'jeu', description: 'Le jeu à proposer', required: true, max_length: 40 },
+                  { type: 3, name: 'lien', description: 'Lien de téléchargement (facultatif, sinon lien de recherche auto)', required: false, max_length: 200 },
+                  { type: 3, name: 'message', description: 'Pourquoi ce jeu ? (facultatif)', required: false, max_length: 150 }] },
       { name: 'annonce-jeu', description: 'Annonce une partie à tout le serveur (notif pour tout le monde)', dm_permission: false,
         options: [{ type: 3, name: 'jeu', description: 'Le jeu (ex : Valorant, GTA, Fortnite…)', required: true, max_length: 40 },
                   { type: 3, name: 'message', description: 'Un petit mot en plus (facultatif)', required: false, max_length: 150 },
@@ -390,6 +394,18 @@ export class House extends DurableObject {
       fields: [{ name: '🔊 Où', value: c.voice ? `<#${c.voice}>` : 'en vocal', inline: true }, { name: `✋ Partants (${c.who.length})`, value: who, inline: true }],
       footer: { text: 'Clique sur « Je viens » pour rejoindre · Discolife' } }],
       components: [{ type: 1, components: [{ type: 2, style: 3, label: 'Je viens', emoji: { name: '✋' }, custom_id: `join:${c.id}` }] }] };
+  }
+  propMsg(c) {
+    const list = a => a.length ? a.slice(0, 15).map(id => `<@${id}>`).join(' ') + (a.length > 15 ? ` +${a.length - 15}` : '') : '—';
+    return { embeds: [{ color: 0xffd84a, title: `💡 Proposition de jeu : ${c.jeu}`, url: c.link,
+      description: `${c.text}\n\n📥 **[Télécharger ${c.jeu}](${c.link})** · on va bientôt y jouer ensemble !` + (c.extra ? `\n> ${c.extra}` : ''),
+      thumbnail: c.av ? { url: c.av } : undefined,
+      fields: [{ name: `🔥 Chauds (${c.hot.length})`, value: list(c.hot), inline: true }, { name: `📥 Téléchargé (${c.dl.length})`, value: list(c.dl), inline: true }],
+      footer: { text: `Proposé par ${c.byName} · vote avec les boutons · Discolife` } }],
+      components: [{ type: 1, components: [
+        { type: 2, style: 1, label: 'Chaud', emoji: { name: '🔥' }, custom_id: `prop:${c.id}:hot` },
+        { type: 2, style: 3, label: 'Je l\'ai téléchargé', emoji: { name: '📥' }, custom_id: `prop:${c.id}:dl` },
+        { type: 2, style: 5, label: 'Télécharger', url: c.link }] }] };
   }
   vipRole(uid, add) { if (this.world.vipRoleId) this.discord(add ? 'PUT' : 'DELETE', `/guilds/${this.env.GUILD_ID}/members/${uid}/roles/${this.world.vipRoleId}`); }
   ixProfile(x) {
@@ -453,6 +469,25 @@ export class House extends DurableObject {
             if (tm.vip === me.id) return reply('Tu es le VIP de cette équipe : un admin peut te retirer le statut avec `/vip retirer`.');
             this.leaveTeam(me); return reply(`Tu as quitté l'équipe **${tm.name}**.`);
           }
+          case 'proposer-jeu': {
+            const jeu = clean(opt(d, 'jeu'), 40), extra = clean(opt(d, 'message') || '', 150); let link = (opt(d, 'lien') || '').trim();
+            if (!jeu) return reply('Donne le nom du jeu 🎮');
+            if (link && !/^https?:\/\/\S+$/i.test(link)) return reply('Le lien doit commencer par https://');
+            if (!link) link = `https://www.google.com/search?q=${encodeURIComponent(jeu + ' télécharger')}`;
+            if (!isAdm && this.limited(me.id, 'prop', 60 * 60e3)) return reply('⏳ Tu as déjà proposé un jeu il y a moins d\'une heure.');
+            const T_ = [`**${me.name}** propose **${jeu}** ! Téléchargez-le, on va bientôt y jouer 🎮`, `Nouveau jeu en vue 👀 **${me.name}** veut qu'on se lance sur **${jeu}**. Préparez vos PC !`,
+                        `📣 **${me.name}** a trouvé notre prochain jeu : **${jeu}**. Téléchargez-le dès maintenant, la partie arrive bientôt 🔥`];
+            const c = { id: (this.world.seq = (this.world.seq || 0) + 1).toString(36), by: me.id, byName: me.name, jeu, extra, link, text: T_[Math.floor(Math.random() * T_.length)],
+              av: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=128` : null, hot: [me.id], dl: [], t: Date.now() };
+            const ping = isAdm || !!T[me.id];
+            const body = { content: ping ? '@everyone' : '', allowed_mentions: { parse: ping ? ['everyone'] : [], users: [] }, ...this.propMsg(c) };
+            let sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
+            if (!sent && await this.ensureAnnounceRights()) sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
+            if (!sent) return reply('❌ Le bot n\'a pas pu poster dans le salon d\'annonces.');
+            this.world.props = this.world.props || {}; this.world.props[c.id] = c; const ids = Object.keys(this.world.props); if (ids.length > 30) delete this.world.props[ids[0]];
+            this.log('info', me.name, `propose le jeu 💡 ${jeu}`, 'salle-gaming');
+            return reply(`💡 Ta proposition est postée dans <#${this.gameChannel()}>${ping ? ' avec une notif pour tout le monde' : ''} !`);
+          }
           case 'annonce-jeu': {
             const jeu = clean(opt(d, 'jeu'), 40), extra = clean(opt(d, 'message') || '', 150);
             if (!jeu) return reply('Donne le nom du jeu 🎮');
@@ -493,6 +528,14 @@ export class House extends DurableObject {
       }
       if (ix.type === 3) {
         const [k, to, ok] = (ix.data.custom_id || '').split(':');
+        if (k === 'prop') {
+          const c = (this.world.props || {})[to]; if (!c) return follow({ content: '⌛ Cette proposition est trop ancienne.', flags: 64 });
+          const arr = ok === 'dl' ? c.dl : c.hot, i = arr.indexOf(me.id); if (i >= 0) arr.splice(i, 1); else arr.push(me.id);
+          if (ok === 'dl' && i < 0 && !c.hot.includes(me.id)) c.hot.push(me.id);
+          await reply({ allowed_mentions: { parse: [] }, ...this.propMsg(c) });
+          if (i < 0) this.log('info', me.name, ok === 'dl' ? `a téléchargé 📥 ${c.jeu}` : `est chaud pour 🔥 ${c.jeu}`, 'salle-gaming');
+          return;
+        }
         if (k === 'join') {
           const c = (this.world.gameCalls || {})[to]; if (!c) return follow({ content: '⌛ Cette partie est terminée.', flags: 64 });
           const i = c.who.indexOf(me.id); if (i >= 0) { if (me.id !== c.by) c.who.splice(i, 1); } else c.who.push(me.id);
