@@ -361,10 +361,12 @@ const CARS={
 };
 const CAR_MODELS=CARS; // compat
 const CARLABELS=[];
-function wheel2(cx,yy,cz,r,hub,ww){const ring=(rr,dy)=>{const a=[];for(let i=0;i<22;i++){const t=2*Math.PI*i/22;a.push([cx+rr*Math.cos(t),yy+(dy||0),cz+rr*Math.sin(t)])}return a};
+function wheel2(cx,yy,cz,r,hub,ww,st){const ring=(rr,dy)=>{const a=[];for(let i=0;i<22;i++){const t=2*Math.PI*i/22;a.push([cx+rr*Math.cos(t),yy+(dy||0),cz+rr*Math.sin(t)])}return a};
   poly(ring(r,-.16),'#07060c');poly(ring(r),'#14121c');poly(ring(r*.9),'#201d2a');if(ww)poly(ring(r*.84),'#e9e6ef');
   const rim=hub||'#b9bdcb';poly(ring(r*.66,.005),rim);poly(ring(r*.5,.008),shade(rim,.55));
-  for(let k=0;k<5;k++){const a=k*2*Math.PI/5+.3;line([[cx+r*.14*Math.cos(a),yy+.01,cz+r*.14*Math.sin(a)],[cx+r*.62*Math.cos(a),yy+.01,cz+r*.62*Math.sin(a)]],rim,4)}
+  const ns=st==='multi'?10:st==='turbine'?14:st==='deep'?4:5,lw=st==='multi'?2:st==='turbine'?2.5:st==='deep'?6:4,r0=st==='deep'?.3:.14;
+  if(st==='deep')poly(ring(r*.6,.009),shade(rim,.35));
+  for(let k=0;k<ns;k++){const a=k*2*Math.PI/ns+.3,a2=st==='turbine'?a+.5:a;line([[cx+r*r0*Math.cos(a),yy+.01,cz+r*r0*Math.sin(a)],[cx+r*.62*Math.cos(a2),yy+.01,cz+r*.62*Math.sin(a2)]],st==='sport'?shade(rim,.6):rim,lw)}
   poly(ring(r*.15,.012),shade(rim,1.15))}
 function profZ(pr,u){for(let i=1;i<pr.length;i++){const a=pr[i-1],b=pr[i];if(b[0]<a[0])break;if(u>=a[0]&&u<=b[0]&&b[0]>a[0])return a[1]+(b[1]-a[1])*(u-a[0])/(b[0]-a[0])}return pr[1][1]}
 // extrusion d'un profil entre y0 et y1 ; glassy = segments vitrés (pare-brise…)
@@ -402,7 +404,8 @@ function drawCar(c,t){
   if(has('slide'))line([Q([.25,B[0][1]+.1],y1+.006),Q([.25,.96],y1+.006),Q([.6,.96],y1+.006),Q([.6,B[0][1]+.1],y1+.006)],shade(col,.5),2);
   const bpu=m.bp<1?m.bp:null;if(bpu){line([Q([bpu,B[0][1]+.08],y1+.006),Q([bpu,profZ(B,bpu)],y1+.006)],shade(col,.5),2);line([Q([bpu+.04,profZ(B,bpu)-.12],y1+.007),Q([bpu+.09,profZ(B,bpu)-.12],y1+.007)],shade(col,1.3),3)}
   // phares, calandre, pare-chocs sur la face avant
-  const fxx=x+L+.004,zb0=B[B.length-1][1];[[y+.1,y+.42],[y1-.42,y1-.1]].forEach(([a,b])=>glowQ([[fxx,a,zf-.13],[fxx,b,zf-.13],[fxx,b,zf-.04],[fxx,a,zf-.04]],has('classique')?'#fff4c8':'#fff4c8',14));
+  const fxx=x+L+.004,zb0=B[B.length-1][1];[[y+.1,y+.42],[y1-.42,y1-.1]].forEach(([a,b])=>glowQ([[fxx,a,zf-.13],[fxx,b,zf-.13],[fxx,b,zf-.04],[fxx,a,zf-.04]],u.hlneon&&c.hl?c.hl:'#fff4c8',u.hlneon?26:14));
+  if(u.hlneon&&c.hl&&!c.preview){ctx.save();ctx.globalAlpha=.18+.06*Math.sin(t*3);poly([[fxx,y+.1,.02],[fxx+1.6,y-.3,.02],[fxx+1.6,y1+.3,.02],[fxx,y1-.1,.02]],c.hl);ctx.restore()}
   poly([[fxx,y+.5,zb0+.06],[fxx,y1-.5,zb0+.06],[fxx,y1-.5,Math.min(zf-.15,zb0+.26)],[fxx,y+.5,Math.min(zf-.15,zb0+.26)]],'#0e0b16');
   if(has('splitter'))poly([[fxx+.06,y-.02,zb0],[fxx+.06,y1+.02,zb0],[fxx,y1+.02,zb0+.04],[fxx,y-.02,zb0+.04]],'#111');
   if(has('chromeb')){line([[fxx+.02,y+.05,zb0+.05],[fxx+.02,y1-.05,zb0+.05]],'#e8eaf2',5);line([[x-.01,y1+.01,zb0+.05],[x+.08,y1+.01,zb0+.05]],'#e8eaf2',5)}
@@ -411,14 +414,14 @@ function drawCar(c,t){
   if(has('stripes')){[W/2-.16,W/2+.06].forEach(o=>{const ys=y+o;[[0,m.cab[0][0]],[m.cab[m.cab.length-1][0],1]].forEach(([a,b])=>{const pts=[];for(let k=0;k<=8;k++){const uu=a+(b-a)*k/8;pts.push([x+uu*L,ys+.05,profZ(B,uu)+.008])}line(pts,'rgba(255,255,255,.9)',7)})})}
   if(has('slats')){for(let k=0;k<5;k++){const uu=.08+k*.045;line([Q([uu,profZ(B,uu)+.006],y+.35),Q([uu,profZ(B,uu)+.006],y1-.35)],'#0d0a14',3)}}
   // roues côté près
-  wx.forEach(cx=>wheel2(cx,y1+.02,r,r,hub,has('whitewall')));
+  wx.forEach(cx=>wheel2(cx,y1+.02,r,r,u.rims&&c.rim==='sport'?'#e23b3b':hub,has('whitewall'),u.rims?c.rim:null));
   // habitacle
   const C=m.cab,ins=.13;extrude(C,x,L,y+ins,y1-ins,col,true);
   const yc=y1-ins+.004;ctx.save();
   const cxm=C.reduce((a,p)=>a+p[0],0)/C.length,czm=C.reduce((a,p)=>a+p[1],0)/C.length;
   const win=C.map(p=>{const du=(cxm-p[0])*L,dz=czm-p[1],d=Math.hypot(du,dz)||1,k=Math.min(.09,d*.4);return [p[0]+du/d*k/L,p[1]+dz/d*k]});
   path(win.map(p=>Q(p,yc)));ctx.clip();if(m.glassFrom){const g0=x+m.glassFrom*L;path([[g0,yc,0],[x+L,yc,0],[x+L,yc,3],[g0,yc,3]]);ctx.clip()}
-  gpoly(win.map(p=>Q(p,yc)),'#a9cbff','#0b1328',Q([0,1.4],yc),Q([0,.7],yc));
+  gpoly(win.map(p=>Q(p,yc)),u.tint?'#3a3f52':'#a9cbff',u.tint?'#04050a':'#0b1328',Q([0,1.4],yc),Q([0,.7],yc));
   const sw=(t*.15+(c.spot||0)*.3)%1.6-.3;poly([Q([sw,0],yc),Q([sw+.08,0],yc),Q([sw+.2,2],yc),Q([sw+.12,2],yc)],'rgba(255,255,255,.16)');
   if(bpu)poly([Q([bpu-.015,0],yc+.001),Q([bpu+.015,0],yc+.001),Q([bpu+.015,3],yc+.001),Q([bpu-.015,3],yc+.001)],shade(col,.7));
   ctx.restore();
@@ -438,7 +441,7 @@ function drawCar(c,t){
     const q=P(px,ym,zp+.1);ctx.save();ctx.translate(q[0],q[1]);ctx.transform(.866,-.5,0,1,0,0);ctx.font='900 12px system-ui,sans-serif';const tw=ctx.measureText(u.plateTxt).width;const sc=Math.min(1,(.5*S)/tw);ctx.scale(sc,1);ctx.fillStyle='#1a2a6a';ctx.fillText(u.plateTxt,-tw/2,4.5);ctx.restore()}
   ctx.restore();
   if(c.preview)return;
-  const p=P(x+L/2,y+W+.45,0),lab=c.owner+' · '+m.n;CARLABELS.push(()=>{ctx.font='700 15px system-ui';const tw=ctx.measureText(lab).width;ctx.fillStyle='rgba(10,6,24,.82)';rr(p[0]-tw/2-7,p[1]-2,tw+14,20,8);ctx.fill();ctx.fillStyle='#d9d3ff';ctx.fillText(lab,p[0]-tw/2,p[1]+13)});
+  const p=P(x+L/2,y+W+.45,0),lab=(c.crown?'👑 ':'')+c.owner+' · '+m.n+(c.votes?` · ${c.votes}❤️`:'');CARLABELS.push(()=>{ctx.font='700 15px system-ui';const tw=ctx.measureText(lab).width;ctx.fillStyle='rgba(10,6,24,.82)';rr(p[0]-tw/2-7,p[1]-2,tw+14,20,8);ctx.fill();ctx.fillStyle='#d9d3ff';ctx.fillText(lab,p[0]-tw/2,p[1]+13);if(c.crown){const q=P(x+L/2,y+W/2,2.3+Math.sin(t*2)*.08);ctx.font='38px system-ui';ctx.textAlign='center';ctx.fillText('👑',q[0],q[1]);ctx.textAlign='left'}});
 }
 // aperçu d'un modèle pour la concession
 const CARPREV={};
@@ -628,7 +631,8 @@ function roomImg(k){const key=cacheKey(k);if(CACHE[key])return CACHE[key];const 
 function frame(){
   const t=now();ctx=MAIN;ctx.setTransform(1,0,0,1,0,0);
   const V=SS?SS.room:cur;ctx.drawImage(roomImg(V),0,0);DYN[V](t);
-  if(V==='garage'){Object.values(PROF).filter(p=>p.car).sort((a,b)=>(SPOTS_G[a.car.spot].x+SPOTS_G[a.car.spot].y)-(SPOTS_G[b.car.spot].x+SPOTS_G[b.car.spot].y)).forEach(p=>drawCar({spot:p.car.spot,owner:p.name,model:p.car.model,col:p.car.col,neon:!!(p.upOn||{}).neon,up:{...(p.upOn||{}),plateTxt:p.plate},t0:dropT[p.id]??-9},t))}
+  if(V==='garage'){Object.values(PROF).filter(p=>p.car).sort((a,b)=>(SPOTS_G[a.car.spot].x+SPOTS_G[a.car.spot].y)-(SPOTS_G[b.car.spot].x+SPOTS_G[b.car.spot].y)).forEach(p=>{const cvn=(W.cv||{})[p.id]||0,top=carTop();drawCar({spot:p.car.spot,owner:p.name,model:p.car.model,col:p.car.col,neon:!!(p.upOn||{}).neon,up:{...(p.upOn||{}),plateTxt:p.plate},hl:p.hl,rim:p.rim,votes:cvn,crown:top&&top===p.id,t0:dropT[p.id]??-9},t)})}
+  drawAmbience(V,t);
   if(CARLABELS.length)CARLABELS.splice(0).forEach(f=>f());
   const R=ROOMS[V],ppl=inRoom(V);
   ppl.map((p,i)=>({p,s:R.spots[i%R.spots.length],o:Math.floor(i/R.spots.length)})).sort((a,b)=>(a.s[0]+a.s[1])-(b.s[0]+b.s[1])).forEach(({p,s,o})=>drawAvatar(p,s[0]+o*.6,s[1]+o*.6,s[2],t));
@@ -636,6 +640,7 @@ function frame(){
   drawParts(t);drawBubbles(t);
   const v=ctx.createRadialGradient(500,500,380,500,500,760);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.55)');ctx.fillStyle=v;ctx.fillRect(0,0,1000,1000);
   if(trans){const a=(t-trans.t0)/.45;if(a>=1)trans=null;else{ctx.save();ctx.globalAlpha=1-a;const s=1+a*.12;ctx.translate(500,500);ctx.scale(s,s);ctx.drawImage(snap,-500,-500);ctx.restore()}}
+  drawWeather(V,t);
   drawIntro(t);
   if(SS)ssDraw(t);
   requestAnimationFrame(frame)}
@@ -727,7 +732,8 @@ function toggleAudio(){try{const a=AC();if(audioOn){clearInterval(aTimer);audioO
 const MODELS=Object.fromEntries(Object.entries(CARS).map(([k,v])=>[k,v.n]));
 const ownsCar=(P_,k)=>!CARS[k].p||(P_.owned||[]).includes('car_'+k);
 const COLS=['#ff4fa8','#4fe3ff','#ffd84a','#b6e32c','#d63a3a','#f2f2f7','#1e1e28','#a66bff'];
-const UPS=['neon','spoiler','gold','chrome','rainbow','smoke','plate'];
+const UPS=['neon','spoiler','gold','chrome','rainbow','smoke','plate','tint','hlneon','rims'];
+function carTop(){const v=W.cv||{};let b=null,n=0;for(const[k,c]of Object.entries(v))if(c>n&&PROF[k]&&PROF[k].car){b=k;n=c}return b}
 let carSel={model:'berline',col:'#ff4fa8'};
 function renderPanel(){const p=$('#panel'),k=cur,P_=me();
   if(k==='garage'){const parked=Object.values(PROF).filter(x=>x.car).length;if(!ownsCar(P_,carSel.model))carSel.model='berline';const sel=CARS[carSel.model];
@@ -736,7 +742,11 @@ function renderPanel(){const p=$('#panel'),k=cur,P_=me();
     <div class="row" style="margin-bottom:10px">${COLS.map(c=>`<span class="sw ${c===carSel.col?'on':''}" data-c="${c}" style="background:${c}"></span>`).join('')}</div>
     <div class="row"><button class="btn pri" id="park">${P_.car?'🔁 Changer ma caisse':'🅿️ Garer ma caisse'}</button>${P_.car?'<button class="btn" id="unpark">Sortir ma caisse</button>':''}</div></div>
     <div class="card"><h3>🔧 Atelier</h3><div class="atel">${UPS.map(u=>{const it=SHOPDEF[u]||{};const own=(P_.owned||[]).includes(u),on=(P_.upOn||{})[u];return `<div class="item"><span class="e">${it.e||''}</span><div><b>${esc(it.n||u)}</b></div>${own?`<button class="btn ${on?'grn':''}" data-up="${u}">${on?'ON':'OFF'}</button>`:`<button class="btn gold" data-buy="${u}">${it.p} 🪙</button>`}</div>`}).join('')}</div>
-    ${(P_.owned||[]).includes('plate')?`<div class="row" style="margin-top:10px"><input id="plateIn" maxlength="8" value="${esc(P_.plate||'')}" placeholder="Texte de ta plaque"><button class="btn" id="plateOk">OK</button></div>`:''}</div>`;
+    ${(P_.owned||[]).includes('plate')?`<div class="row" style="margin-top:10px"><input id="plateIn" maxlength="8" value="${esc(P_.plate||'')}" placeholder="Texte de ta plaque"><button class="btn" id="plateOk">OK</button></div>`:''}
+    ${(P_.owned||[]).includes('hlneon')?`<div style="margin-top:10px"><div class="mut" style="margin-bottom:6px">💡 Couleur des phares</div><div class="row">${['#4fe3ff','#ff4fd8','#3bd16f','#ffd84a','#a66bff','#ff3b3b','#ffffff'].map(c=>`<span class="sw ${P_.hl===c?'on':''}" data-hl="${c}" style="background:${c}"></span>`).join('')}</div></div>`:''}
+    ${(P_.owned||[]).includes('rims')?`<div style="margin-top:10px"><div class="mut" style="margin-bottom:6px">⚙️ Style de jantes</div><div class="row">${[['sport','Sport rouge'],['multi','Multi-rayons'],['deep','Deep dish'],['turbine','Turbine']].map(([k,n])=>`<button class="btn ${P_.rim===k?'grn':''}" data-rim="${k}">${n}</button>`).join('')}</div></div>`:''}</div>
+    <div class="card"><h3>❤️ Caisse de la semaine <span class="r mut">vote dimanche 20 h</span></h3>${(()=>{const cars=Object.values(PROF).filter(x=>x.car).sort((a,b)=>((W.cv||{})[b.id]||0)-((W.cv||{})[a.id]||0));return cars.length?cars.map(x=>`<div class="item"><span class="e">${carTop()===x.id?'👑':'🚗'}</span><div><b>${esc(x.name)}</b><div class="mut">${CARS[x.car.model]?CARS[x.car.model].n:''} · ${(W.cv||{})[x.id]||0} ❤️</div></div>${x.id===ME?'<span class="mut">ta caisse</span>':`<button class="btn" data-cv="${x.id}">❤️ Voter</button>`}</div>`).join(''):'<div class="mut">Aucune caisse garée pour l\'instant.</div>'})()}<div class="mut" style="margin-top:6px">La plus votée gagne +50 🪙 et le badge 🚗 dans le récap du dimanche.</div></div>`;
+    p.querySelectorAll('[data-hl]').forEach(e=>e.onclick=()=>send({t:'tune',k:'hl',v:e.dataset.hl}));p.querySelectorAll('[data-rim]').forEach(e=>e.onclick=()=>send({t:'tune',k:'rim',v:e.dataset.rim}));p.querySelectorAll('[data-cv]').forEach(e=>e.onclick=()=>send({t:'carvote',id:e.dataset.cv}));
     p.querySelectorAll('[data-car]').forEach(d=>d.onclick=e=>{if(e.target.dataset.buycar)return;if(!ownsCar(me(),d.dataset.car))return toast(`🔒 ${CARS[d.dataset.car].n} : ${CARS[d.dataset.car].p} 🪙`);carSel.model=d.dataset.car;renderPanel()});
     p.querySelectorAll('[data-buycar]').forEach(b=>b.onclick=()=>{carSel.model=b.dataset.buycar;send({t:'buy',item:'car_'+b.dataset.buycar})});
 p.querySelectorAll('.sw').forEach(s=>s.onclick=()=>{carSel.col=s.dataset.c;renderPanel()});
@@ -764,7 +774,7 @@ p.querySelectorAll('.sw').forEach(s=>s.onclick=()=>{carSel.col=s.dataset.c;rende
     $('#skip').onclick=()=>send({t:'skip'});$('#shuf').onclick=()=>send({t:'shuffle'});$('#listen').onclick=()=>{toggleAudio();renderPanel()}}
   else if(k==='arcade'){p.innerHTML=`<div class="card"><h3>🕹️ Mini-jeux entre membres <span class="r mut">2 joueurs minimum</span></h3><div class="games"><button class="btn pri" id="g1"><b>⚔️</b>Duel 1v1</button><button class="btn pri" id="g2"><b>🏁</b>Course</button><button class="btn pri" id="g3"><b>⚡</b>Test de clic</button></div><div class="mut" style="margin-top:10px">Ton record au test de clic : <b>${P_.stats&&P_.stats.clickBest?P_.stats.clickBest+' ms':'—'}</b></div></div>`;
     $('#g1').onclick=duelPicker;$('#g2').onclick=()=>{send({t:'race'});openRace()};$('#g3').onclick=()=>{send({t:'click'});openClick()}}
-  else if(k==='team'){const tm=myTeam();p.innerHTML=tm?`<div class="card"><h3>🔒 ${esc(tm.name)} <span class="r mut">${tm.score} pts</span></h3><div class="mut" style="margin-bottom:8px">Salon privé de l'équipe de ⭐ ${esc(tm.vipName)}. Seuls les membres de l'équipe le voient.</div><div class="members">${tm.members.map(id=>PROF[id]).filter(Boolean).map(x=>`<div class="mem" data-id="${x.id}"><img class="av" src="${avatarSrc(x)}" alt="">${esc(x.name)}${x.id===tm.vip?' ⭐':''}${ONLINE[x.id]?' <i class="dot"></i>':''}</div>`).join('')}</div></div>`:'';
+  else if(k==='team'){const tm=myTeam();p.innerHTML=tm?`<div class="card"><h3>🔒 ${esc(tm.name)} <span class="r mut">${tm.score} pts</span></h3><div class="mut" style="margin-bottom:8px">Salon privé de l'équipe de ⭐ ${esc(tm.vipName)}. Seuls les membres de l'équipe le voient.</div><div class="mut" style="margin-bottom:8px">🏆 ${seasonTxt()}</div><div class="members">${tm.members.map(id=>PROF[id]).filter(Boolean).map(x=>`<div class="mem" data-id="${x.id}"><img class="av" src="${avatarSrc(x)}" alt="">${esc(x.name)}${x.id===tm.vip?' ⭐':''}${ONLINE[x.id]?' <i class="dot"></i>':''}</div>`).join('')}</div></div>`:'';
     p.querySelectorAll('[data-id]').forEach(d=>d.onclick=()=>profile(d.dataset.id))}
   else if(k==='afk'){p.innerHTML=`<div class="card"><h3>💤 AFK</h3><div class="row"><button class="btn" id="slp">${myRoom()==='afk'?'⏰ Se réveiller':'😴 Partir AFK'}</button><button class="btn pri" id="ssB">🖥️ Écran de veille</button></div><div class="mut" style="margin-top:8px">En AFK, tu ne gagnes plus de 🪙. Après 10 min sans rien faire, tu y es envoyé tout seul et l'écran de veille se lance.</div></div>`;
     $('#slp').onclick=()=>goRoom(myRoom()==='afk'?'chill':'afk');$('#ssB').onclick=()=>{const back=myRoom()==='afk'?'chill':myRoom();if(myRoom()!=='afk')goRoom('afk');ssArm=Date.now();ssStart(back)}}
@@ -882,19 +892,20 @@ function drawClick(){if(!clickOpen)return;const c=games.click;if(c&&c.id!==lastC
 // ---------------------------------------------------------------- réseau
 function onMsg(m){const t=now();
   switch(m.t){
-    case 'init':ME=m.me;PROF=m.profiles;ONLINE=m.online;Object.assign(W,{queue:m.queue,np:m.np,poll:m.poll,starboard:m.starboard,records:m.records,teams:m.teams||{}});SHOPDEF=m.shop;BADGEDEF=m.badges;clockSkew=m.now-Date.now();games=m.games||games;
+    case 'init':ME=m.me;PROF=m.profiles;ONLINE=m.online;Object.assign(W,{boost:m.boost,season:m.season,cv:m.cv||{},champs:m.champs||[]});setTimeout(()=>{updBoost();updDaily()},50);Object.assign(W,{queue:m.queue,np:m.np,poll:m.poll,starboard:m.starboard,records:m.records,teams:m.teams||{}});SHOPDEF=m.shop;BADGEDEF=m.badges;clockSkew=m.now-Date.now();games=m.games||games;
       feedEl.innerHTML='';(m.feed||[]).forEach(f=>addFeed(f,true));$('#gate').style.display='none';cur=myRoom();renderTabs();renderPanel();renderLB();if(m.invite)showInvite(m.invite);if(inDiscord&&sdk&&sdk.channelId)send({t:'vc',id:sdk.channelId});if(!inDiscord&&vsync)setTimeout(()=>send({t:'vpoll'}),800);if(cur==='afk')ssStart('chill');else intro={k:cur,t0:now(),seed:1};break;
     case 'pres':{const before=myRoom();ONLINE=m.online;if(!visibleIn(ME,'team')&&cur==='team'&&!myTeam())switchView('garage');renderTabs();renderLB();if(cur==='arcade'||cur==='garage')renderPanel();break}
-    case 'prof':{const old=PROF[m.p.id];PROF[m.p.id]=m.p;if(m.drop)dropT[m.drop]=t;if(m.p.id===ME){updHeader();if(modalKind==='shop')shop();if(!myTeam()&&cur==='team')switchView('garage')}
+    case 'prof':{const old=PROF[m.p.id];PROF[m.p.id]=m.p;if(m.drop)dropT[m.drop]=t;if(m.p.id===ME){updHeader();updDaily();if(modalKind==='shop')shop();if(!myTeam()&&cur==='team')switchView('garage')}
       if(!old||old.name!==m.p.name||old.team!==m.p.team)renderTabs();if(['garage','arcade','team'].includes(cur))renderPanel();renderLB();break}
     case 'feed':addFeed(m.f);break;
-    case 'world':Object.assign(W,{queue:m.queue,np:m.np,poll:m.poll,starboard:m.starboard,records:m.records,teams:m.teams||W.teams});renderLB();renderTabs();if(['chill','studio','team'].includes(cur))renderPanel();break;
+    case 'world':Object.assign(W,{boost:m.boost,season:m.season,cv:m.cv||{},champs:m.champs||[]});updBoost();Object.assign(W,{queue:m.queue,np:m.np,poll:m.poll,starboard:m.starboard,records:m.records,teams:m.teams||W.teams});renderLB();renderTabs();if(['chill','studio','team'].includes(cur))renderPanel();break;
     case 'fx':parts.push({id:m.id,k:m.k,t0:t,dx:rnd(-25,25)});lastSpeak[m.id]=t+1.2;if(m.sfx&&visibleIn(m.id,cur))sfx(m.k);break;
     case 'chat':bubbles.push({id:m.id,text:m.text,t0:t});lastSpeak[m.id]=t+Math.min(3,1+m.text.length/20);break;
     case 'speak':lastSpeak[m.id]=t+2.2;break;
     case 'star':{const d=feedEl.querySelector(`[data-fid="${m.fid}"] .star`);if(d){d.textContent='★ '+m.n;d.classList.add('on')}break}
     case 'toast':toast(m.text);break;
     case 'boom':boom();sfx('coin');break;
+    case 'banner':showBanner(m.text,m.by);break;
     case 'goto':if(SS)SS.back=m.room;else if(cur!==m.room)switchView(m.room);if(m.voice)toast(`🔊 Tu as changé de vocal → ${m.room==='team'&&myTeam()?myTeam().name:ROOMS[m.room].name}`);break;
     case 'serve':lolaCall({d:m.d,by:m.by});break;
     case 'earn':{const pill=$('#coinPill');pill.classList.remove('bump');void pill.offsetWidth;pill.classList.add('bump');const s=document.createElement('span');s.className='plus';s.textContent='+'+m.n;pill.appendChild(s);setTimeout(()=>s.remove(),1400);break}
@@ -929,7 +940,52 @@ $('#gateBtn').onclick=()=>{location.href='auth/login'};
   b.onclick=e=>{e.stopPropagation();sndMute=!sndMute;try{localStorage.setItem('dl_mute',sndMute?'1':'0')}catch(_){}up();if(!sndMute)roomSound(cur)};
   const host=cv.parentElement;if(getComputedStyle(host).position==='static')host.style.position='relative';host.appendChild(b);
   const st=document.createElement('style');st.textContent='#vsB{position:absolute;top:54px;right:10px;z-index:3;width:38px;height:38px;border-radius:50%;border:1px solid #ffffff2a;background:#0a0618b3;color:#fff;font-size:17px;cursor:pointer;backdrop-filter:blur(6px)}#sndB{position:absolute;top:10px;right:10px;z-index:3;width:38px;height:38px;border-radius:50%;border:1px solid #ffffff2a;background:#0a0618b3;color:#fff;font-size:17px;cursor:pointer;backdrop-filter:blur(6px)}';document.head.appendChild(st)}
-if(/^(localhost|127\.)/.test(location.hostname))window.__dl={PROF:()=>PROF,lola:()=>lolaCall({d:'mojito',by:'Test'}),cat:ph=>{cat={...cat,ph,t0:now(),dur:30,from:CATBED,to:CATBED}}};
+// ---------------------------------------------------------------- saison, boost, défis, boss, bannière
+const MOIS=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+function seasonTxt(){const d=new Date();const end=new Date(d.getFullYear(),d.getMonth()+1,1);const j=Math.ceil((end-d)/864e5);return `Saison de ${MOIS[d.getMonth()]} · fin dans ${j} jour${j>1?'s':''} · l'équipe gagnante reçoit 🏆 + 100 🪙 chacun`}
+const hdr=document.querySelector('header .stats');
+const boostPill=document.createElement('div');boostPill.className='pill';boostPill.id='boostPill';boostPill.style.cssText='display:none;background:linear-gradient(90deg,#ffd84a,#ff8a3d);color:#2a1400;font-weight:900';hdr.prepend(boostPill);
+function updBoost(){const b=W.boost;if(b&&b.until>Date.now()){boostPill.style.display='';boostPill.textContent=`⚡ x2 jusqu'à ${new Date(b.until).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`}else boostPill.style.display='none'}
+setInterval(updBoost,30000);
+const defB=document.createElement('button');defB.className='btn';defB.id='defB';defB.textContent='🎯 Défis';hdr.appendChild(defB);
+const bossB=document.createElement('button');bossB.className='btn gold';bossB.id='bossB';bossB.textContent='🛠️ Boss';bossB.style.display='none';hdr.appendChild(bossB);
+function updDaily(){const p=me();if(!p)return;const d=p.daily;const n=d?d.list.filter(c=>c.done).length:0;defB.textContent=`🎯 Défis ${n}/3`;bossB.style.display=p.admin?'':'none';if(modalKind==='defis')defis()}
+setInterval(updDaily,3000);
+function defis(){const d=me().daily;if(!d)return;openM(`<h2>🎯 Défis du jour</h2><div class="mut" style="margin-bottom:10px">Nouveaux défis chaque jour à minuit. +30 🪙 par défi, +50 🪙 si tu boucles les 3.</div>
+  ${d.list.map(c=>`<div class="item" style="margin-bottom:8px"><span class="e">${c.done?'✅':c.e}</span><div style="flex:1"><b>${esc(c.n)}</b><div class="xpbar" style="width:100%;margin-top:6px"><i style="width:${100*c.prog/c.goal}%"></i></div></div><span class="mut">${c.prog}/${c.goal}</span></div>`).join('')}
+  <div class="mut">${d.bonus?'🏅 Bonus récupéré, bien joué !':'🎁 Bonus des 3 défis : +50 🪙'}</div>`,'defis')}
+defB.onclick=defis;
+function boss(){const opts=Object.values(PROF).sort((a,b)=>a.name.localeCompare(b.name)).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');const b=W.boost&&W.boost.until>Date.now();
+  openM(`<h2>🛠️ Panneau du boss</h2>
+  <div class="card"><h3>🎁 Donner des pièces</h3><div class="row"><select id="bTo">${opts}</select><input id="bN" type="number" value="100" style="width:90px"><button class="btn gold" id="bGive">Envoyer</button></div><div class="mut" style="margin-top:4px">Un nombre négatif retire des pièces.</div></div>
+  <div class="card"><h3>⚡ Événement double XP & pièces ${b?'<span class="r grn">en cours</span>':''}</h3><div class="row">${[1,2,4,'minuit'].map(h=>`<button class="btn" data-bh="${h}">${h==='minuit'?'Jusqu\'à minuit':h+' h'}</button>`).join('')}${b?'<button class="btn" data-bh="0">Arrêter</button>':''}</div><label class="mut"><input type="checkbox" id="bPing" checked> Annoncer sur Discord avec @everyone</label></div>
+  <div class="card"><h3>📢 Annonce</h3><textarea id="bTxt" maxlength="200" rows="2" style="width:100%" placeholder="Ton message pour tout le monde"></textarea><div class="row"><label class="mut"><input type="checkbox" id="bDc" checked> Aussi sur Discord</label><label class="mut"><input type="checkbox" id="bEv"> @everyone</label><button class="btn pri" id="bSay">Publier</button></div></div>`,'boss');
+  $('#bGive').onclick=()=>{send({t:'admin',op:'coins',to:$('#bTo').value,n:+$('#bN').value});toast('🎁 Envoyé !')};
+  mbox.querySelectorAll('[data-bh]').forEach(x=>x.onclick=()=>{let h=x.dataset.bh;if(h==='minuit'){const d=new Date(),m=new Date(d);m.setHours(24,0,0,0);h=Math.max(.25,(m-d)/3600e3)}send({t:'admin',op:'boost',h:+h,ping:$('#bPing').checked});closeM()});
+  $('#bSay').onclick=()=>{const t=$('#bTxt').value.trim();if(!t)return;send({t:'admin',op:'say',text:t,discord:$('#bDc').checked,ping:$('#bEv').checked});closeM()}}
+bossB.onclick=boss;
+const bannerEl=document.createElement('div');bannerEl.id='banner';document.body.appendChild(bannerEl);
+function showBanner(text,by){bannerEl.innerHTML=`<b>📢 ${esc(by)}</b><span>${esc(text)}</span>`;bannerEl.classList.add('on');sfx('coin');clearTimeout(bannerEl._t);bannerEl._t=setTimeout(()=>bannerEl.classList.remove('on'),9000)}
+{const st=document.createElement('style');st.textContent=`#banner{position:fixed;left:50%;top:14px;transform:translate(-50%,-140%);z-index:60;background:linear-gradient(90deg,#7b6bff,#ff4fa8);color:#fff;padding:12px 20px;border-radius:16px;box-shadow:0 10px 40px #0008;display:flex;flex-direction:column;gap:2px;max-width:min(92vw,560px);transition:transform .5s cubic-bezier(.2,1.4,.4,1)}#banner.on{transform:translate(-50%,0)}#banner span{font-size:15px}`;document.head.appendChild(st)}
+// ---------------------------------------------------------------- ambiance : jour/nuit, météo, fêtes
+function parisNow(){const s=new Date().toLocaleString('en-US',{timeZone:'Europe/Paris'});return new Date(s)}
+let AMB={t:-99};
+function ambState(t){if(t-AMB.t<20&&AMB.d)return AMB;const d=parisNow(),h=d.getHours()+d.getMinutes()/60,mo=d.getMonth(),day=d.getDate();
+  let night=0;if(h>=21.5||h<5.5)night=.34;else if(h>=19.5)night=(h-19.5)/2*.34;else if(h<7.5)night=(7.5-h)/2*.34;
+  const key=d.toISOString().slice(0,10)+':'+Math.floor(d.getHours()/3);let hs=0;for(const c of key)hs=(hs*33+c.charCodeAt(0))>>>0;
+  const wet=hs%10<2,cold=mo===11||mo<=1;AMB={t,d,h,night,dusk:h>=18.5&&h<21,rain:wet&&!cold,snow:(wet&&cold)||(mo===11&&day>=20),xmas:mo===11,hallo:mo===9&&day>=18,hearts:mo===1&&day>=10&&day<=14};return AMB}
+const FLAKES=Array.from({length:70},(_,i)=>({x:Math.random()*1000,y:Math.random()*1000,s:.5+Math.random(),o:Math.random()*6}));
+function drawAmbience(V,t){const A=ambState(t);if(V==='afk')return;
+  if(A.xmas){const N_=9;for(const side of [0,1]){const pts=[];for(let i=0;i<=40;i++){const u=i/40*N_,sag=Math.sin(i/40*Math.PI*6)*.18;pts.push(side?[u,.05,4.05-Math.abs(sag)]:[.05,u,4.05-Math.abs(sag)])}line(pts,'#1f5b2a',3);
+      pts.forEach((q,i)=>{if(i%2)return;const c=['#ff3b3b','#ffd84a','#3bd16f','#4fe3ff','#ff4fd8'][(i/2)%5],on=(Math.floor(t*2)+i)%3!==0;const sp=P(...q);ctx.beginPath();ctx.arc(sp[0],sp[1]+3,4,0,7);ctx.fillStyle=on?c:shade(c,.4);if(on){ctx.shadowColor=c;ctx.shadowBlur=12}ctx.fill();ctx.shadowBlur=0})}}
+  if(A.hallo){[[8.3,1.2],[1.2,8.3]].forEach(([x,y],k)=>{const q=P(x,y,0);ctx.font='44px system-ui';ctx.fillText('🎃',q[0]-22,q[1]);ctx.save();ctx.globalAlpha=.6+.4*Math.sin(t*4+k);ctx.fillStyle='#ffb84f';ctx.beginPath();ctx.arc(q[0],q[1]-14,26,0,7);ctx.globalAlpha*=.25;ctx.fill();ctx.restore()});
+    for(let i=0;i<3;i++){const bx=(t*60+i*330)%1100-50,by=150+Math.sin(t*2+i)*40+i*30;ctx.font='26px system-ui';ctx.fillText('🦇',bx,by)}}
+  if(A.hearts)for(let i=0;i<8;i++){const ph=(t*.08+i/8)%1;ctx.globalAlpha=Math.sin(ph*Math.PI)*.7;ctx.font='22px system-ui';ctx.fillText('💗',(i*131)%900+50,900-ph*700);ctx.globalAlpha=1}
+  if(A.night>0){ctx.save();ctx.globalCompositeOperation='multiply';ctx.fillStyle=`rgba(${A.dusk?'150,110,170':'90,100,170'},1)`;ctx.globalAlpha=A.night*1.4;ctx.fillRect(0,0,1000,1000);ctx.restore()}}
+function drawWeather(V,t){const A=ambState(t);if(V==='afk')return;
+  if(A.rain){ctx.save();ctx.strokeStyle='rgba(170,200,255,.35)';ctx.lineWidth=1.5;ctx.beginPath();for(let i=0;i<90;i++){const x=(i*97+t*260)%1100-50,y=(i*173+t*900)%1000;ctx.moveTo(x,y);ctx.lineTo(x-7,y+22)}ctx.stroke();ctx.restore()}
+  if(A.snow){ctx.save();ctx.fillStyle='rgba(255,255,255,.85)';FLAKES.forEach(f=>{const y=(f.y+t*30*f.s)%1000,x=(f.x+Math.sin(t+f.o)*20)%1000;ctx.globalAlpha=.4+.5*f.s;ctx.beginPath();ctx.arc(x,y,1.5+f.s*2,0,7);ctx.fill()});ctx.restore()}}
+if(/^(localhost|127\.)/.test(location.hostname))window.__dl={PROF:()=>PROF,lola:()=>lolaCall({d:'mojito',by:'Test'}),cat:ph=>{cat={...cat,ph,t0:now(),dur:30,from:CATBED,to:CATBED}},amb:o=>{ambState(now());Object.assign(AMB,o,{t:1e9})}};
 frame();start();
 
 })();
