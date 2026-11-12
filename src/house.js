@@ -336,11 +336,16 @@ export class House extends DurableObject {
       { name: 'retirer', description: 'VIP : retirer un membre de ton équipe', dm_permission: false, options: [mem] },
       { name: 'equipe', description: 'VIP : renommer ton salon privé', dm_permission: false, options: [{ type: 3, name: 'nom', description: 'Nouveau nom du salon', required: true, max_length: 24 }] },
       { name: 'quitter', description: 'Quitter ton équipe', dm_permission: false },
+      { name: 'annonce-jeu', description: 'Annonce une partie à tout le serveur (notif pour tout le monde)', dm_permission: false,
+        options: [{ type: 3, name: 'jeu', description: 'Le jeu (ex : Valorant, GTA, Fortnite…)', required: true, max_length: 40 },
+                  { type: 3, name: 'message', description: 'Un petit mot en plus (facultatif)', required: false, max_length: 150 },
+                  { type: 7, name: 'salon', description: 'Le salon vocal où vous jouez (par défaut : salle-gaming)', required: false, channel_types: [2] }] },
       { name: 'classement', description: 'Classement des équipes et des joueurs Discolife', dm_permission: false },
       { name: 'profil', description: 'Voir un profil Discolife', dm_permission: false, options: [{ ...mem, required: false }] },
     ];
     const r = await this.discord('PUT', `/applications/${this.env.CLIENT_ID}/guilds/${this.env.GUILD_ID}/commands`, cmds);
     await this.ensureVipHub();
+    await this.ensureAnnounceRights();
     return r;
   }
   // rôle « ⭐ VIP » + salon texte privé où les VIP commandent le bot
@@ -365,6 +370,26 @@ export class House extends DurableObject {
     }
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
+  }
+  gameChannel() { return this.env.GAME_CHANNEL_ID || this.env.ANNOUNCE_CHANNEL_ID; }
+  async ensureAnnounceRights() { // le bot doit pouvoir écrire et mentionner @everyone dans le salon d'annonces
+    const VIEW = 1 << 10, SEND = 1 << 11, EMBED = 1 << 14, HIST = 1 << 16, EVERY = 1 << 17;
+    const ok = await this.discord('PUT', `/channels/${this.gameChannel()}/permissions/${this.env.CLIENT_ID}`, { type: 1, allow: String(VIEW + SEND + EMBED + HIST + EVERY), deny: '0' });
+    this.world.annOk = ok !== null; this.save(); return this.world.annOk;
+  }
+  async gamingVoice() {
+    if (this.world.gamingVoice) return this.world.gamingVoice;
+    const chs = await this.discord('GET', `/guilds/${this.env.GUILD_ID}/channels`);
+    const v = (chs || []).find(c => c.type === 2 && /gaming/i.test(c.name)); if (v) { this.world.gamingVoice = v.id; this.save(); }
+    return v ? v.id : null;
+  }
+  gameCallMsg(c) {
+    const who = c.who.length ? c.who.map(id => `<@${id}>`).join(' ') : '*personne pour l\'instant*';
+    return { embeds: [{ color: 0x4fe3ff, title: `🎮 ${c.jeu} · on lance une partie !`, description: c.text + (c.extra ? `\n> ${c.extra}` : ''),
+      thumbnail: c.av ? { url: c.av } : undefined,
+      fields: [{ name: '🔊 Où', value: c.voice ? `<#${c.voice}>` : 'en vocal', inline: true }, { name: `✋ Partants (${c.who.length})`, value: who, inline: true }],
+      footer: { text: 'Clique sur « Je viens » pour rejoindre · Discolife' } }],
+      components: [{ type: 1, components: [{ type: 2, style: 3, label: 'Je viens', emoji: { name: '✋' }, custom_id: `join:${c.id}` }] }] };
   }
   vipRole(uid, add) { if (this.world.vipRoleId) this.discord(add ? 'PUT' : 'DELETE', `/guilds/${this.env.GUILD_ID}/members/${uid}/roles/${this.world.vipRoleId}`); }
   ixProfile(x) {
@@ -428,6 +453,24 @@ export class House extends DurableObject {
             if (tm.vip === me.id) return reply('Tu es le VIP de cette équipe : un admin peut te retirer le statut avec `/vip retirer`.');
             this.leaveTeam(me); return reply(`Tu as quitté l'équipe **${tm.name}**.`);
           }
+          case 'annonce-jeu': {
+            const jeu = clean(opt(d, 'jeu'), 40), extra = clean(opt(d, 'message') || '', 150);
+            if (!jeu) return reply('Donne le nom du jeu 🎮');
+            if (!isAdm && this.limited(me.id, 'annjeu', 30 * 60e3)) return reply('⏳ Tu as déjà fait une annonce il y a moins de 30 min.');
+            if (!isAdm && this.limited('all', 'annjeu', 5 * 60e3)) return reply('⏳ Une partie vient d\'être annoncée, attends quelques minutes.');
+            const T_ = [`**${me.name}** lance une partie de **${jeu}** et cherche des joueurs ! 🔥`, `Qui est chaud pour du **${jeu}** ? **${me.name}** vous attend 😎`,
+                        `🚨 Partie de **${jeu}** en approche ! **${me.name}** monte une équipe, ramenez-vous`, `**${me.name}** a envie de jouer à **${jeu}**. Qui le suit ? 🎯`];
+            const c = { id: (this.world.seq = (this.world.seq || 0) + 1).toString(36), by: me.id, jeu, extra, text: T_[Math.floor(Math.random() * T_.length)],
+              voice: opt(d, 'salon') || await this.gamingVoice(), av: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=128` : null, who: [me.id], t: Date.now() };
+            const body = { content: '@everyone', allowed_mentions: { parse: ['everyone'], users: [] }, ...this.gameCallMsg(c) };
+            let sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
+            if (!sent && await this.ensureAnnounceRights()) sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
+            if (!sent) return reply('❌ Le bot n\'a pas le droit de mentionner @everyone dans le salon d\'annonces. Le boss doit lui donner la permission « Mentionner @everyone ».');
+            this.world.gameCalls = this.world.gameCalls || {}; this.world.gameCalls[c.id] = c;
+            const ids = Object.keys(this.world.gameCalls); if (ids.length > 30) delete this.world.gameCalls[ids[0]];
+            me.playing = { g: jeu, t: Date.now() }; this.pushProf(me); this.log('info', me.name, `annonce une partie de 🎮 ${jeu}`, 'salle-gaming');
+            return reply(`📢 C'est annoncé dans <#${this.gameChannel()}> avec une notif pour tout le monde !`);
+          }
           case 'classement': {
             const tms = Object.values(T).sort((a, b) => b.score - a.score);
             const top = Object.values(this.profiles).sort((a, b) => b.lvl - a.lvl || b.xp - a.xp).slice(0, 5);
@@ -450,6 +493,13 @@ export class House extends DurableObject {
       }
       if (ix.type === 3) {
         const [k, to, ok] = (ix.data.custom_id || '').split(':');
+        if (k === 'join') {
+          const c = (this.world.gameCalls || {})[to]; if (!c) return follow({ content: '⌛ Cette partie est terminée.', flags: 64 });
+          const i = c.who.indexOf(me.id); if (i >= 0) { if (me.id !== c.by) c.who.splice(i, 1); } else c.who.push(me.id);
+          await reply({ allowed_mentions: { parse: [] }, ...this.gameCallMsg(c) });
+          if (i < 0) { this.log('info', me.name, `rejoint la partie de 🎮 ${c.jeu}`, 'salle-gaming'); if (c.by !== me.id) this.toUser(c.by, { t: 'toast', text: `✋ ${me.name} vient jouer à ${c.jeu} !` }); }
+          return;
+        }
         if (k !== 'inv') return;
         if (me.id !== to) return follow({ content: 'Cette invitation n\'est pas pour toi 😉', flags: 64 });
         const inv = this.world.invites[to]; const tm = inv && T[inv.tid];

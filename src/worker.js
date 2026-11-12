@@ -93,7 +93,7 @@ export default {
       if (ix.type === 1) return json({ type: 1 });
       const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
       ctx.waitUntil(stub.fetch('https://do/ix', { method: 'POST', body }));
-      if (ix.type === 2) return json({ type: 5, data: ['equipe', 'quitter', 'retirer'].includes(ix.data?.name) ? { flags: 64 } : {} });
+      if (ix.type === 2) return json({ type: 5, data: ['equipe', 'quitter', 'retirer', 'annonce-jeu'].includes(ix.data?.name) ? { flags: 64 } : {} });
       return json({ type: 6 });
     }
     if (p === '/api/setup') {
