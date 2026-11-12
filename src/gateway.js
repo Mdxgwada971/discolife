@@ -13,7 +13,7 @@ export function installGateway(House) {
     async gwEnsure() {
       if (!this.env.BOT_TOKEN || this.gwAlive() || this._gwConnecting) return;
       this._gwConnecting = true;
-      try { await this.gwConnect(); } catch (e) { console.log('gw connect', e); } finally { this._gwConnecting = false; }
+      try { await this.gwConnect(); this._gwErr = null; } catch (e) { console.log('gw connect', e); this._gwErr = String(e && e.message || e); } finally { this._gwConnecting = false; }
     },
     async gwConnect() {
       if (this._gw && this._gw.ws) { try { this._gw.ws.close(); } catch (e) {} clearInterval(this._gw.hb); }
@@ -22,7 +22,7 @@ export function installGateway(House) {
       ws.accept();
       const gw = this._gw = { ws, seq: null, hb: null, lastAck: Date.now(), session: this._gwSession || null };
       ws.addEventListener('message', ev => { try { this.gwOnMessage(gw, JSON.parse(ev.data)); } catch (e) { console.log('gw msg', e); } });
-      ws.addEventListener('close', ev => { console.log('gw close', ev.code); clearInterval(gw.hb); if (this._gw === gw) this._gw = null; if (ev.code === 4004) this._gwDead = true; });
+      ws.addEventListener('close', ev => { console.log('gw close', ev.code); this._gwErr = 'close ' + ev.code + ' ' + (ev.reason || ''); clearInterval(gw.hb); if (this._gw === gw) this._gw = null; if (ev.code === 4004) this._gwDead = true; });
       ws.addEventListener('error', e => console.log('gw err', e.message));
     },
     gwSend(gw, op, d) { try { gw.ws.send(JSON.stringify({ op, d })); } catch (e) {} },

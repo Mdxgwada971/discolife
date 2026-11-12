@@ -96,6 +96,10 @@ export default {
       if (ix.type === 2) return json({ type: 5, data: ['equipe', 'quitter', 'retirer', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis'].includes(ix.data?.name) ? { flags: 64 } : {} });
       return json({ type: 6 });
     }
+    if (p === '/api/gw') {
+      const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
+      return new Response(await (await stub.fetch('https://do/gw')).text(), { headers: { 'content-type': 'application/json' } });
+    }
     if (p === '/api/setup') {
       const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
       return new Response(await (await stub.fetch('https://do/setup')).text(), { headers: { 'content-type': 'application/json' } });
