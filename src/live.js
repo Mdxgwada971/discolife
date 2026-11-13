@@ -157,12 +157,12 @@ export function installLive(House) {
       return h >= 8 && h < 18 ? 'day' : h >= 18 && h < 21 ? 'dusk' : 'night';
     },
     async updateBanner() {
-      const L = this.L(), slot = this.bannerSlot(); if (L.banSlot === slot && L.banMsg) return; const url = `${SITE}/banners/${slot}.jpg?v=2`;
+      const L = this.L(), slot = this.bannerSlot(); if (L.banSlot === slot && L.banMsg && L.banAnim === 1) return; const url = `${SITE}/banners/${slot}.jpg?v=2`; const shown = ['day', 'dusk', 'night'].includes(slot) ? `${SITE}/gifs/banniere.gif?v=1` : url; L.banAnim = 1;
       const g = await this.discord('GET', `/guilds/${this.env.GUILD_ID}`);
       if (g && g.premium_tier >= 2) { try { const r = await this.env.ASSETS.fetch(new Request(url)); const b = new Uint8Array(await r.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); await this.discord('PATCH', `/guilds/${this.env.GUILD_ID}`, { banner: 'data:image/jpeg;base64,' + btoa(s) }); } catch (e) { console.log('banner', e); } }
       const ch = await this.chanId(/bienvenue/i, 0); if (!ch) return;
       const titles = { day: '☀️ La Maison · journée', dusk: '🌇 La Maison · soirée', night: '🌙 La Maison · de nuit', xmas: '🎄 La Maison · Noël', hallo: '🎃 La Maison · Halloween' };
-      const body = { embeds: [{ color: 0xa66bff, title: titles[slot], description: `En ce moment : **${Object.keys(this.online()).length}** sur Discolife · **${Object.keys(this.srv().voice).length}** en vocal`, image: { url: url + '?v=' + Date.now().toString(36).slice(-4) }, footer: { text: 'La bannière change selon l\'heure et les fêtes · Discolife' } }],
+      const body = { embeds: [{ color: 0xa66bff, title: titles[slot], description: `En ce moment : **${Object.keys(this.online()).length}** sur Discolife · **${Object.keys(this.srv().voice).length}** en vocal`, image: { url: shown + (shown.includes('?') ? '&' : '?') + 't=' + Date.now().toString(36).slice(-4) }, footer: { text: 'La bannière change selon l\'heure et les fêtes · Discolife' } }],
         components: [{ type: 1, components: [{ type: 2, style: 5, label: 'Entrer dans Discolife', emoji: { name: '🏠' }, url: SITE }] }] };
       if (L.banMsg && L.banCh === ch) { const ok = await this.discord('PATCH', `/channels/${ch}/messages/${L.banMsg}`, body); if (ok) { L.banSlot = slot; return; } }
       const m = await this.discord('POST', `/channels/${ch}/messages`, body); if (m) { L.banMsg = m.id; L.banCh = ch; L.banSlot = slot; }
