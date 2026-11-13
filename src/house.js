@@ -44,6 +44,7 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 import { installGateway } from './gateway.js';
 import { installSocial, FURN, PETS, ACH } from './social.js';
 import { installLive } from './live.js';
+import { installExtras } from './extras.js';
 export class House extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -580,6 +581,9 @@ export class House extends DurableObject {
                   { type: 3, name: 'message', description: 'Un petit mot en plus (facultatif)', required: false, max_length: 150 },
                   { type: 7, name: 'salon', description: 'Le salon vocal où vous jouez (par défaut : salle-gaming)', required: false, channel_types: [2] }] },
       { name: 'classement', description: 'Classement des équipes et des joueurs Discolife', dm_permission: false },
+      { name: 'boutique', description: 'Dépense tes pièces : couleur de pseudo, rôle Mécène…', dm_permission: false },
+      { name: 'jeux-roles', description: 'Choisis tes jeux pour être prévenu des parties', dm_permission: false },
+      { name: 'sauvegarde', description: 'Envoie une sauvegarde complète dans le salon staff (réservé au boss)', default_member_permissions: '8', dm_permission: false },
       { name: 'profil', description: 'Voir un profil Discolife', dm_permission: false, options: [{ ...mem, required: false }] },
     ];
     const r = await this.discord('PUT', `/applications/${this.env.CLIENT_ID}/guilds/${this.env.GUILD_ID}/commands`, cmds);
@@ -615,7 +619,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v17'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } }
+  async setupCheck() { const V = 'v18'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
@@ -753,7 +757,7 @@ export class House extends DurableObject {
             const c = { id: (this.world.seq = (this.world.seq || 0) + 1).toString(36), by: me.id, byName: me.name, jeu, extra, link, text: T_[Math.floor(Math.random() * T_.length)],
               av: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=128` : null, hot: [me.id], dl: [], t: Date.now() };
             const ping = isAdm || !!T[me.id];
-            const body = { content: ping ? '@everyone' : '', allowed_mentions: { parse: ping ? ['everyone'] : [], users: [] }, ...this.propMsg(c) };
+            const gr = this.gameRoleMention(c.jeu); const body = { content: [ping ? '@everyone' : '', gr ? `<@&${gr.rid}>` : ''].filter(Boolean).join(' '), allowed_mentions: { parse: ping ? ['everyone'] : [], roles: gr ? [gr.rid] : [], users: [] }, ...this.propMsg(c) };
             let sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
             if (!sent && await this.ensureAnnounceRights()) sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
             if (!sent) return reply('❌ Le bot n\'a pas pu poster dans le salon d\'annonces.');
@@ -772,7 +776,7 @@ export class House extends DurableObject {
             if (!isAdm && this.limitedP(me.id, 'soiree', 30 * 60e3)) return reply('⏳ Tu as déjà planifié une soirée il y a moins de 30 min.');
             const ping = isAdm || !!T[me.id];
             const e = { id: (this.world.seq = (this.world.seq || 0) + 1).toString(36), by: me.id, byName: me.name, jeu, extra, ts, yes: [me.id], maybe: [], ping, voice: opt(d, 'salon') || await this.gamingVoice(), reminded: ts - Date.now() < 15 * 60e3 };
-            const sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, { content: ping ? '@everyone' : '', allowed_mentions: { parse: ping ? ['everyone'] : [] }, ...this.eventMsg(e) });
+            const sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, { content: [ping ? '@everyone' : '', this.gameRoleMention(e.jeu) ? `<@&${this.gameRoleMention(e.jeu).rid}>` : ''].filter(Boolean).join(' '), allowed_mentions: { parse: ping ? ['everyone'] : [], roles: this.gameRoleMention(e.jeu) ? [this.gameRoleMention(e.jeu).rid] : [] }, ...this.eventMsg(e) });
             if (!sent) return reply('❌ Le bot n\'a pas pu poster la soirée.');
             this.world.events = this.world.events || {}; this.world.events[e.id] = e; this.ensureAlarm();
             this.log('info', me.name, `organise une soirée 🎮 ${jeu}`, 'salle-gaming');
@@ -792,14 +796,15 @@ export class House extends DurableObject {
                         `🚨 Partie de **${jeu}** en approche ! **${me.name}** monte une équipe, ramenez-vous`, `**${me.name}** a envie de jouer à **${jeu}**. Qui le suit ? 🎯`];
             const c = { id: (this.world.seq = (this.world.seq || 0) + 1).toString(36), by: me.id, jeu, extra, text: T_[Math.floor(Math.random() * T_.length)],
               voice: opt(d, 'salon') || await this.gamingVoice(), av: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=128` : null, who: [me.id], t: Date.now() };
-            const body = { content: pingE ? '@everyone' : '', allowed_mentions: { parse: pingE ? ['everyone'] : [], users: [] }, ...this.gameCallMsg(c) };
+            const gr = this.gameRoleMention(jeu);
+            const body = { content: [pingE ? '@everyone' : '', gr ? `<@&${gr.rid}> ${gr.G[1]} les joueurs de **${gr.G[2]}**, c'est pour vous !` : ''].filter(Boolean).join(' · '), allowed_mentions: { parse: pingE ? ['everyone'] : [], roles: gr ? [gr.rid] : [], users: [] }, ...this.gameCallMsg(c) };
             let sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
             if (!sent && await this.ensureAnnounceRights()) sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
             if (!sent) return reply('❌ Le bot n\'a pas le droit de mentionner @everyone dans le salon d\'annonces. Le boss doit lui donner la permission « Mentionner @everyone ».');
             this.world.gameCalls = this.world.gameCalls || {}; this.world.gameCalls[c.id] = c;
             const ids = Object.keys(this.world.gameCalls); if (ids.length > 30) delete this.world.gameCalls[ids[0]];
             me.playing = { g: jeu, t: Date.now() }; this.pushProf(me); this.log('info', me.name, `annonce une partie de 🎮 ${jeu}`, 'salle-gaming');
-            return reply(`📢 C'est annoncé dans <#${this.gameChannel()}>${pingE ? ' avec une notif pour tout le monde' : ''} !`);
+            return reply(`📢 C'est annoncé dans <#${this.gameChannel()}>${pingE ? ' avec une notif pour tout le monde' : ''}${gr ? ` et les joueurs ${gr.G[1]} ${gr.G[2]} sont cités` : ''} !`);
           }
           case 'classement': {
             const tms = Object.values(T).sort((a, b) => b.score - a.score);
@@ -825,6 +830,8 @@ export class House extends DurableObject {
       if (ix.type === 3) {
         const [k, to, ok] = (ix.data.custom_id || '').split(':');
         if (k === 'drop' || k === 'dd' || k === 'hint') { await this.liveButton(k, to, ok, me, reply, follow); return; }
+        if (k === 'groles') { await this.toggleGames(me, ix.data.values || [], follow); return; }
+        if (k === 'shop') { await this.shopBuy(me, (ix.data.values || [])[0] || '', follow); return; }
         if (k === 'launch') { await this.launchCleanup(ix.message && ix.message.id); return; }
         if (k === 'ev') {
           const e = (this.world.events || {})[to]; if (!e) return follow({ content: '⌛ Cette soirée est terminée.', flags: 64 });
@@ -987,3 +994,4 @@ export class House extends DurableObject {
 installGateway(House);
 installSocial(House);
 installLive(House);
+installExtras(House);

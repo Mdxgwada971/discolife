@@ -95,6 +95,7 @@ export function installGateway(House) {
       const prev = S.pres[id]; if (prev && prev.since && (!v || v.g !== prev.g)) { try { this.addGameTime(prev.g, id, Math.floor((Date.now() - prev.since) / 1000)); } catch (e) {} }
       const changed = JSON.stringify(prev ? { g: prev.g, k: prev.k } : null) !== JSON.stringify(v);
       if (v) S.pres[id] = changed || !prev ? { ...v, since: Date.now() } : prev; else delete S.pres[id];
+      if (v && changed && v.k === 0) { try { this.autoGameRole(id, v.g); } catch (e) {} }
       return changed;
     },
     gwMsg(d) {

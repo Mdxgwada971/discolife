@@ -2,6 +2,7 @@
 // Salons stats en direct, vocaux à la demande, question du jour, quiz express, coffres surprise, anniversaires,
 // comptage collectif, duels à mise, mot mystère, membre de la semaine, starboard automatique, journal du matin, bannière.
 import { FURN } from './social.js';
+import { QOTD2, QUIZ2, WORDS2 } from './banks.js';
 
 const QOTD = [
   'Pire jeu auquel tu as joué de ta vie ?', 'Si tu pouvais vivre dans un jeu vidéo, lequel ?', 'Ton plat préféré de tous les temps ?', 'La série que tu conseillerais à tout le monde ?',
@@ -35,6 +36,7 @@ const QUIZ = [
 const WORDS = ['banane', 'tornade', 'pingouin', 'galaxie', 'trompette', 'cactus', 'volcan', 'sardine', 'parapluie', 'dinosaure', 'citrouille', 'boussole', 'kangourou', 'moustache', 'baguette', 'chocolat',
   'licorne', 'toboggan', 'crocodile', 'escargot', 'aspirateur', 'girafe', 'brioche', 'fusee', 'chaussette', 'arcenciel', 'piscine', 'trampoline', 'hamster', 'saucisson', 'bonbon', 'pirate', 'robot',
   'raclette', 'tracteur', 'flamant', 'ananas', 'cornichon', 'grenouille', 'papillon', 'manette', 'pastèque', 'camembert', 'karaoke', 'igloo', 'requin', 'sorcier', 'trottinette', 'popcorn', 'koala'];
+const ALL_QOTD = [...new Set([...QOTD, ...QOTD2])], ALL_QUIZ = [...QUIZ, ...QUIZ2], ALL_WORDS = [...new Set([...WORDS, ...WORDS2].map(w => String(w).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '')))];
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9' -]/g, '').replace(/\s+/g, ' ').trim();
 function lev(a, b) { const m = a.length, n = b.length; if (!m) return n; if (!n) return m; let prev = Array.from({ length: n + 1 }, (_, j) => j);
   for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; } return prev[n]; }
@@ -107,8 +109,9 @@ export function installLive(House) {
       if (!L.sched || L.sched.d !== today) {
         const at = (h0, h1) => { const base = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' })); base.setHours(0, 0, 0, 0); return rndInt(h0 * 60, h1 * 60); };
         L.sched = { d: today, quiz: [at(13, 16), at(19, 22)].sort((a, b) => a - b), drop: [at(11, 14), at(16, 19), at(20, 23)].sort((a, b) => a - b), done: {} };
-        L.word = { w: WORDS[rndInt(0, WORDS.length - 1)], found: null, d: today };
+        L.word = { w: ALL_WORDS[this.bag('w', ALL_WORDS.length)], found: null, d: today };
       }
+      try { await this.backupTick(today); } catch (e) { console.log('backupTick', e); }
       const mins = d.getHours() * 60 + d.getMinutes(), done = L.sched.done;
       if (mins >= 9 * 60 && !done.journal) { done.journal = 1; await this.postJournal(); await this.birthdays(); }
       if (mins >= 18 * 60 && !done.qotd) { done.qotd = 1; await this.postQotd(); }
@@ -163,17 +166,22 @@ export function installLive(House) {
       const m = await this.discord('POST', `/channels/${ch}/messages`, body); if (m) { L.banMsg = m.id; L.banCh = ch; L.banSlot = slot; }
     },
 
+    // pioche sans répétition : on ne retombe sur une question qu'une fois toutes les autres sorties
+    bag(key, n) { const L = this.L(); L.bags = L.bags || {}; let b = L.bags[key];
+      if (!b || b.n !== n || !b.left.length) { const left = Array.from({ length: n }, (_, i) => i); for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [left[i], left[j]] = [left[j], left[i]]; } b = L.bags[key] = { n, left }; }
+      const i = b.left.pop(); this.save(); return i; },
+
     // ---------------------------------------------------------------- question du jour, quiz, coffre, journal, anniversaires
     async postQotd() {
       const ch = await this.chanId(/^g[ée]n[ée]ral$|g[ée]n[ée]ral/i, 0); if (!ch) return; const L = this.L();
-      const q = QOTD[(Math.floor(Date.now() / 864e5)) % QOTD.length];
+      const q = ALL_QOTD[this.bag('qotd', ALL_QOTD.length)];
       const m = await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: 0xffd84a, title: '💬 Question du jour', description: `**${q}**\n\nRéponds dans le fil 👇 · les 10 premiers gagnent **10 🪙** sur Discolife` }] });
       if (!m) return; const th = await this.discord('POST', `/channels/${ch}/messages/${m.id}/threads`, { name: 'Réponses · question du jour', auto_archive_duration: 1440 });
       L.qotd = { msg: m.id, thread: th ? th.id : null, d: dayKey(), paid: [] };
     },
     async postQuiz() {
       const ch = await this.chanId(/mini-jeux/i, 0) || await this.chanId(/g[ée]n[ée]ral/i, 0); if (!ch) return; const L = this.L();
-      const q = QUIZ[rndInt(0, QUIZ.length - 1)];
+      const q = ALL_QUIZ[this.bag('quiz', ALL_QUIZ.length)];
       await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: 0x4fe3ff, title: '⚡ Quiz express !', description: `**${q[0]}**\n\nLe premier qui répond juste ici gagne **25 🪙** · 3 minutes !\nLe bot te dit si tu chauffes 🔥 ou si tu refroidis 🥶, et propose un indice au bout de 3 essais ratés.` }] });
       L.quiz = { ch, ans: q[1].map(norm), show: q[1][0], until: Date.now() + 180e3, done: false, fails: 0, hints: 0 };
     },
@@ -324,7 +332,7 @@ export function installLive(House) {
       // 2. connexion en direct + commandes
       const S = this.srv(); ok('Connexion', 'Connexion en direct (gateway)', !!this.gwAlive(), this._gwDead ? 'erreur fatale : vérifier les intents du portail' : this._asleep ? 'en veille de nuit' : '');
       ok('Connexion', 'Salons reçus', Object.keys(S.ch).length > 0, Object.keys(S.ch).length + ' salons'); ok('Connexion', 'Membres reçus (intent membres)', Object.keys(S.mem).length > 0, Object.keys(S.mem).length + ' membres');
-      const want = ['vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
+      const want = ['boutique', 'jeux-roles', 'sauvegarde', 'vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
       const miss = want.filter(n => !(cmds || []).some(c => c.name === n)); ok('Commandes', `${want.length} commandes slash`, !miss.length, miss.length ? 'manquent : ' + miss.join(', ') : '');
       // 3. salons et rôles
       const chs = chs0 || []; const ex = id => id && chs.some(c => c.id === id); const byName = re => chs.find(c => re.test(c.name));
@@ -343,6 +351,9 @@ export function installLive(House) {
           ok('Actions', 'Supprimer un message', !!(await this.discord('DELETE', `/channels/${tch}/messages/${m.id}`))); }
         const vc = await this.discord('POST', `/guilds/${g}/channels`, { name: '🧪 test', type: 2, parent_id: (chs.find(c => c.id === L.createVc) || {}).parent_id || undefined }); ok('Actions', 'Créer / supprimer un salon vocal', !!vc); if (vc) await this.discord('DELETE', `/channels/${vc.id}`);
       } else ok('Actions', 'Salon de test (staff)', false, 'salon staff introuvable');
+      { const X = this.X(); ok('Salons', '🎮 choisis-tes-jeux', ex(X.pickCh)); const ids = new Set((roles || []).map(r => r.id));
+        ok('Rôles', 'Rôles de jeux', Object.values(X.groles).filter(id => ids.has(id)).length >= 20, Object.values(X.groles).filter(id => ids.has(id)).length + ' rôles');
+        ok('Rôles', 'Boutique (couleurs + Mécène)', Object.values(X.croles).filter(id => ids.has(id)).length === 8 && ids.has(X.mecene)); ok('Sauvegarde', 'Copie du jour', X.bakDay === dayKey(), (X.baks || []).length + ' jours gardés'); }
       ok('Salons', '🎯 valorant', ex(L.valoCh)); ok('Valorant', 'Clé API HenrikDev (secret HENRIK_KEY)', !!this.env.HENRIK_KEY, this.env.HENRIK_KEY ? Object.values(this.profiles).filter(p => p.valo).length + ' comptes liés' : 'à ajouter dans Cloudflare');
       ok('Jeux', 'Tracker de temps de jeu', true, Object.keys(L.games || {}).length + ' jeux suivis');
       let banOk = false; try { banOk = !!(await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request(SITE + '/banners/day.jpg')) : fetch(SITE + '/banners/day.jpg')).then(r => r.ok)); } catch (_) {} ok('Site', 'Bannières en ligne', banOk);
@@ -365,6 +376,9 @@ export function installLive(House) {
     // ---------------------------------------------------------------- interactions (boutons et commandes)
     async liveCommand(d, me, reply, opt, who, isAdm, chId, follow) {
       if (d.name === 'jeux') return reply(this.gamesEmbed());
+      if (d.name === 'boutique') return reply(this.shopMsg(me));
+      if (d.name === 'jeux-roles') { const X = this.X(); return reply(X.pickCh ? `🎮 Choisis tes jeux dans <#${X.pickCh}> (menu sous le message).` : this.pickerMsg()); }
+      if (d.name === 'sauvegarde') { if (!isAdm) return reply('🔒 Réservé au boss.'); const okb = await this.backupFile('Sauvegarde demandée par ' + me.name); return reply(okb ? `💾 Sauvegarde envoyée dans <#${this.world.staffCh}>.` : '❌ Impossible d\'envoyer la sauvegarde (salon staff introuvable ?).'); }
       if (d.name === 'mot') {
         const w = this.L().word; if (!w || w.d !== dayKey()) return reply('Pas encore de mot mystère aujourd\'hui, reviens après 9 h !');
         if (w.found) return reply(`🔍 Le mot mystère du jour a déjà été trouvé : « **${w.w}** ». Nouveau mot demain !`);
