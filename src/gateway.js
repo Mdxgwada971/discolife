@@ -52,7 +52,7 @@ export function installGateway(House) {
         case 'GUILD_CREATE': if (d.id !== this.env.GUILD_ID) break;
           S.ch = {}; for (const c of d.channels || []) this.gwChan(c);
           for (const mb of d.members || []) this.gwMem(mb);
-          S.voice = {}; for (const v of d.voice_states || []) if (v.channel_id) S.voice[v.user_id] = { ch: v.channel_id, mute: !!(v.self_mute || v.mute), deaf: !!(v.self_deaf || v.deaf) };
+          S.voice = {}; for (const v of d.voice_states || []) if (v.channel_id && v.user_id !== this.env.CLIENT_ID) S.voice[v.user_id] = { ch: v.channel_id, mute: !!(v.self_mute || v.mute), deaf: !!(v.self_deaf || v.deaf) };
           S.pres = {}; for (const p of d.presences || []) this.gwPres(p, true);
           S.ready = true; this.srvPush(true); break;
         case 'CHANNEL_CREATE': case 'CHANNEL_UPDATE': if (d.guild_id === this.env.GUILD_ID) { this.gwChan(d); this.srvPush(true); } break;
@@ -60,11 +60,11 @@ export function installGateway(House) {
         case 'GUILD_MEMBER_ADD': if (d.guild_id === this.env.GUILD_ID) { this.gwMem(d); this.gwWelcome(d); try { this.liveStat(d.user.id, 'm', 0); this.L().day.joins++; } catch (e) {} } break;
         case 'GUILD_MEMBER_UPDATE': if (d.guild_id === this.env.GUILD_ID) this.gwMem(d); break;
         case 'VOICE_STATE_UPDATE': {
-          if (d.guild_id !== this.env.GUILD_ID) break; if (d.member) this.gwMem(d.member);
+          if (d.guild_id !== this.env.GUILD_ID) break; if (d.user_id === this.env.CLIENT_ID) { this._botVoice = d.channel_id || null; break; } if (d.member) this.gwMem(d.member);
           const before = S.voice[d.user_id] && S.voice[d.user_id].ch;
           if (d.channel_id) S.voice[d.user_id] = { ch: d.channel_id, mute: !!(d.self_mute || d.mute), deaf: !!(d.self_deaf || d.deaf) }; else delete S.voice[d.user_id];
           this.bcast({ t: 'sv', voice: { [d.user_id]: this.voiceView(S.voice[d.user_id]) }, mem: S.mem[d.user_id] ? { [d.user_id]: S.mem[d.user_id] } : {} });
-          if (before !== d.channel_id) { this.gwVoiceMoved(d.user_id, d.channel_id); this.liveOnVoice(d, before).catch(e => console.log('live voice', e)); }
+          if (before !== d.channel_id) { if (d.channel_id) { try { this.doorbell(d.user_id, d.channel_id); } catch (e) {} } this.gwVoiceMoved(d.user_id, d.channel_id); this.liveOnVoice(d, before).catch(e => console.log('live voice', e)); }
           break;
         }
         case 'PRESENCE_UPDATE': if (d.guild_id === this.env.GUILD_ID) { const ch = this.gwPres(d), id = d.user.id; if (ch && (this.voiceView(S.voice[id]) || this.online()[id])) this.bcast({ t: 'sv', pres: { [id]: S.pres[id] || null } }); } break;

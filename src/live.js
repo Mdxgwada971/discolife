@@ -353,7 +353,10 @@ export function installLive(House) {
       } else ok('Actions', 'Salon de test (staff)', false, 'salon staff introuvable');
       { const X = this.X(); ok('Salons', '🎮 choisis-tes-jeux', ex(X.pickCh)); const ids = new Set((roles || []).map(r => r.id));
         ok('Rôles', 'Rôles de jeux', Object.values(X.groles).filter(id => ids.has(id)).length >= 20, Object.values(X.groles).filter(id => ids.has(id)).length + ' rôles');
-        ok('Rôles', 'Boutique (couleurs + Mécène)', Object.values(X.croles).filter(id => ids.has(id)).length === 8 && ids.has(X.mecene)); ok('Sauvegarde', 'Copie du jour', X.bakDay === dayKey(), (X.baks || []).length + ' jours gardés'); }
+        ok('Rôles', 'Boutique (couleurs + Mécène)', Object.values(X.croles).filter(id => ids.has(id)).length === 8 && ids.has(X.mecene)); if (!Object.keys(X.sb || {}).length || X.sbErr) { try { await this.ensureSoundboard(); } catch (e) {} }
+        ok('Sons', `Soundboard Discolife (${Object.keys(X.sb || {}).length}/11 sons)`, Object.keys(X.sb || {}).length >= 11, X.sbErr || '');
+        ok('Sons', 'Sonnette à l\'entrée en vocal', !X.bellLast || X.bellLast.ok, X.bellLast ? (X.bellLast.ok ? `dernier son : ${X.bellLast.f}` : X.bellLast.joined ? 'le bot entre mais ne peut pas jouer le son (droit « Utiliser le soundboard » / « Parler »)' : 'le bot n\'arrive pas à entrer dans le vocal (droit « Se connecter »)') : 'pas encore déclenchée');
+        ok('Sauvegarde', 'Copie du jour', X.bakDay === dayKey(), (X.baks || []).length + ' jours gardés'); }
       ok('Salons', '🎯 valorant', ex(L.valoCh)); ok('Valorant', 'Clé API HenrikDev (secret HENRIK_KEY)', !!this.env.HENRIK_KEY, this.env.HENRIK_KEY ? Object.values(this.profiles).filter(p => p.valo).length + ' comptes liés' : 'à ajouter dans Cloudflare');
       ok('Jeux', 'Tracker de temps de jeu', true, Object.keys(L.games || {}).length + ' jeux suivis');
       let banOk = false; try { banOk = !!(await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request(SITE + '/banners/day.jpg')) : fetch(SITE + '/banners/day.jpg')).then(r => r.ok)); } catch (_) {} ok('Site', 'Bannières en ligne', banOk);

@@ -15,6 +15,13 @@ export const COLORS = [
   ['rouge', '🔴', 'Rouge', 0xff4d4d], ['orange', '🟠', 'Orange', 0xff9a3c], ['jaune', '🟡', 'Jaune', 0xffd84a], ['vert', '🟢', 'Vert', 0x3bd16f],
   ['bleu', '🔵', 'Bleu', 0x4f9dff], ['violet', '🟣', 'Violet', 0xa66bff], ['rose', '🌸', 'Rose', 0xff7ac8], ['cyan', '💠', 'Cyan', 0x4fe3ff],
 ];
+export const SOUNDS = [ // fichier, nom dans le soundboard, emoji
+  ['klaxon', 'Discolife klaxon', '🚗'], ['vroom', 'Discolife vroom', '🏎️'], ['coffre', 'Discolife coffre', '🪙'], ['victoire', 'Discolife victoire', '🏆'],
+  ['bienvenue', 'Discolife bienvenue', '👋'], ['level-up', 'Discolife level up', '⬆️'], ['defaite', 'Discolife défaite', '💀'], ['ba-dum-tss', 'Discolife ba dum tss', '🥁'],
+  ['bonne-reponse', 'Discolife bonne réponse', '✅'], ['buzzer', 'Discolife buzzer', '❌'], ['applaudissements', 'Discolife bravo', '👏'],
+];
+// son joué par la « sonnette » quand quelqu'un entre dans un vocal, selon le salon
+const BELL = [[/garage/i, 'vroom'], [/gaming/i, 'level-up'], [/arcade/i, 'bonne-reponse'], [/studio/i, 'applaudissements'], [/chill/i, 'bienvenue'], [/g[ée]n[ée]ral/i, 'bienvenue'], [/salon de|🎮/i, 'klaxon'], [/🔒|place/i, 'victoire']];
 const COLOR_PRICE = 400, MECENE_PRICE = 2500, MECENE = '💎 Mécène';
 export const gameFor = txt => { const t = String(txt || '').trim(); if (!t) return null; return GAMES.find(g => g[0] !== 'autre' && g[3].test(t)) || null; };
 
@@ -113,6 +120,39 @@ export function installExtras(House) {
       await drop(); if (!(await this.discord('PUT', `/guilds/${g}/members/${me.id}/roles/${rid}`))) return follow({ content: '❌ Le bot n\'a pas pu changer ta couleur (rien n\'a été débité).', flags: 64 });
       if (!owned) { me.coins -= COLOR_PRICE; me.colors.push(k); } me.color = k; this.pushProf(me);
       return follow({ content: `${C[1]} Ton pseudo est maintenant **${C[2]}** !${owned ? '' : ` **−${COLOR_PRICE} 🪙** (il te reste ${me.coins})`}`, flags: 64 });
+    },
+
+    // ------------------------------------------------------------ soundboard du serveur + sonnette d'entrée en vocal
+    async ensureSoundboard() {
+      const g = this.env.GUILD_ID, X = this.X(); X.sb = X.sb || {};
+      const cur = await this.discord('GET', `/guilds/${g}/soundboard-sounds`); if (!cur) { X.sbErr = 'lecture impossible'; return false; }
+      const list = cur.items || cur; let err = null;
+      for (const [f, name, emoji] of SOUNDS) {
+        const ex = list.find(x => x.name === name); if (ex) { X.sb[f] = ex.sound_id; continue; }
+        try { const r = await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request(`https://discolife.warren-molongo.workers.dev/sounds/${f}.mp3`)) : fetch(`https://discolife.warren-molongo.workers.dev/sounds/${f}.mp3`));
+          if (!r.ok) { err = 'fichier ' + f; continue; } const b = new Uint8Array(await r.arrayBuffer()); let bin = ''; for (let i = 0; i < b.length; i += 8192) bin += String.fromCharCode(...b.subarray(i, i + 8192));
+          const made = await this.discord('POST', `/guilds/${g}/soundboard-sounds`, { name, sound: 'data:audio/mpeg;base64,' + btoa(bin), volume: 0.8, emoji_name: emoji });
+          if (made) X.sb[f] = made.sound_id; else err = 'droit « Créer des expressions » manquant (ou plus de place dans le soundboard)';
+        } catch (e) { err = String(e.message || e); } }
+      X.sbErr = err; this.save(); return !err;
+    },
+    // quelqu'un entre dans un vocal : le bot passe une seconde, joue le son du salon, puis repart
+    doorbell(uid, chId) {
+      const X = this.X(), L = this.L(), S = this.srv(), now = Date.now(); if (!chId || uid === this.env.CLIENT_ID || X.bellOff) return;
+      const ch = S.ch[chId] || {}; if (/afk/i.test(ch.name || '') || chId === L.createVc || (L.stat && Object.values(L.stat).includes(chId))) return;
+      const h = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' })).getHours(); if (h < 9) return; // pas la nuit
+      X.bellU = X.bellU || {}; if (now - (X.bellU[uid] || 0) < 5 * 60e3) return; X.bellU[uid] = now;
+      const f = (BELL.find(([re]) => re.test(ch.name || '')) || [0, 'bienvenue'])[1], sid = (X.sb || {})[f]; if (!sid || !this.gwAlive()) return;
+      this._bellQ = (this._bellQ || Promise.resolve()).then(() => this.bellRun(chId, sid, f)).catch(e => console.log('bell', e));
+    },
+    async bellRun(chId, sid, f) {
+      const g = this.env.GUILD_ID, X = this.X(), gw = this._gw; if (!gw) return; const wait = ms => new Promise(r => setTimeout(r, ms));
+      this.gwSend(gw, 4, { guild_id: g, channel_id: chId, self_mute: false, self_deaf: false });
+      for (let i = 0; i < 20 && this._botVoice !== chId; i++) await wait(200);
+      let ok = false; if (this._botVoice === chId) { await wait(600); ok = !!(await this.discord('POST', `/channels/${chId}/send-soundboard-sound`, { sound_id: sid, source_guild_id: g })); }
+      X.bellLast = { t: Date.now(), ok, f, joined: this._botVoice === chId }; this.save();
+      await wait(3500); if (this._gw) this.gwSend(this._gw, 4, { guild_id: g, channel_id: null, self_mute: false, self_deaf: false });
+      await wait(800);
     },
 
     // ------------------------------------------------------------ sauvegardes
