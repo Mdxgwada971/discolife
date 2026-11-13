@@ -315,7 +315,7 @@ export function installLive(House) {
     async selfTest(demo) {
       const g = this.env.GUILD_ID, app = this.env.CLIENT_ID, L = this.L(), res = []; const ok = (sec, name, pass, info) => res.push({ sec, name, pass, info: info || '' });
       // 1. permissions du bot
-      const me = await this.discord('GET', `/guilds/${g}/members/${app}`), roles = await this.discord('GET', `/guilds/${g}/roles`);
+      const [me, roles, cmds, chs0, am] = await Promise.all([this.discord('GET', `/guilds/${g}/members/${app}`), this.discord('GET', `/guilds/${g}/roles`), this.discord('GET', `/applications/${app}/guilds/${g}/commands`), this.discord('GET', `/guilds/${g}/channels`), this.discord('GET', `/guilds/${g}/auto-moderation/rules`)]);
       let perms = 0n; if (me && roles) { for (const r of roles) if (r.id === g || me.roles.includes(r.id)) perms |= BigInt(r.permissions); }
       const admin = (perms & 8n) === 8n, has = b => admin || (perms & b) === b;
       const NEED = [['Voir les salons', 1n << 10n], ['Envoyer des messages', 1n << 11n], ['Intégrer des liens', 1n << 14n], ['Voir l\'historique', 1n << 16n], ['Ajouter des réactions', 1n << 6n], ['Mentionner @everyone', 1n << 17n],
@@ -324,15 +324,15 @@ export function installLive(House) {
       // 2. connexion en direct + commandes
       const S = this.srv(); ok('Connexion', 'Connexion en direct (gateway)', !!this.gwAlive(), this._gwDead ? 'erreur fatale : vérifier les intents du portail' : this._asleep ? 'en veille de nuit' : '');
       ok('Connexion', 'Salons reçus', Object.keys(S.ch).length > 0, Object.keys(S.ch).length + ' salons'); ok('Connexion', 'Membres reçus (intent membres)', Object.keys(S.mem).length > 0, Object.keys(S.mem).length + ' membres');
-      const cmds = await this.discord('GET', `/applications/${app}/guilds/${g}/commands`); const want = ['vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
+      const want = ['vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
       const miss = want.filter(n => !(cmds || []).some(c => c.name === n)); ok('Commandes', `${want.length} commandes slash`, !miss.length, miss.length ? 'manquent : ' + miss.join(', ') : '');
       // 3. salons et rôles
-      const chs = await this.discord('GET', `/guilds/${g}/channels`) || []; const ex = id => id && chs.some(c => c.id === id); const byName = re => chs.find(c => re.test(c.name));
+      const chs = chs0 || []; const ex = id => id && chs.some(c => c.id === id); const byName = re => chs.find(c => re.test(c.name));
       ok('Salons', '🔢 comptage', ex(L.countCh)); ok('Salons', '➕ Créer un salon', ex(L.createVc)); ok('Salons', '📊 EN DIRECT (3 compteurs)', L.stat && ['on', 'voice', 'members'].every(k => ex(L.stat[k])));
       ok('Salons', '🤖 bot-vip', ex(this.world.vipChannelId)); ok('Salons', '🛡️ staff', ex(this.world.staffCh));
       for (const [n, re] of [['#général', /g[ée]n[ée]ral/i], ['#annonces', /annonces/i], ['#bienvenue', /bienvenue/i], ['#starboard', /starboard/i], ['#mini-jeux', /mini-jeux/i], ['#discolife', /discolife/i]]) ok('Salons', n, !!byName(re));
       const rn = new Set((roles || []).map(r => r.name)); ok('Rôles', '7 rôles de niveau', ROLES_LIST.every(r => rn.has(r)), ROLES_LIST.filter(r => !rn.has(r)).join(', ')); ok('Rôles', '⭐ VIP', rn.has('⭐ VIP'));
-      const am = await this.discord('GET', `/guilds/${g}/auto-moderation/rules`); ok('Anti-spam', '3 règles AutoMod', (am || []).filter(r => /^Discolife/.test(r.name)).length >= 3);
+      ok('Anti-spam', '3 règles AutoMod', (am || []).filter(r => /^Discolife/.test(r.name)).length >= 3);
       // 4. actions réelles dans 🛡️ staff (puis nettoyage)
       const tch = this.world.staffCh || this.world.vipChannelId;
       if (tch) {
@@ -345,19 +345,25 @@ export function installLive(House) {
       } else ok('Actions', 'Salon de test (staff)', false, 'salon staff introuvable');
       ok('Salons', '🎯 valorant', ex(L.valoCh)); ok('Valorant', 'Clé API HenrikDev (secret HENRIK_KEY)', !!this.env.HENRIK_KEY, this.env.HENRIK_KEY ? Object.values(this.profiles).filter(p => p.valo).length + ' comptes liés' : 'à ajouter dans Cloudflare');
       ok('Jeux', 'Tracker de temps de jeu', true, Object.keys(L.games || {}).length + ' jeux suivis');
-      ok('Site', 'Bannières en ligne', !!(await this.env.ASSETS.fetch(new Request(SITE + '/banners/day.jpg')).then(r => r.ok).catch(() => false)));
-      // 5. démo à la demande
-      let demoTxt = '';
-      const demos = !demo || demo === 'tout' ? ['stats', 'banniere', 'journal', 'question', 'quiz', 'coffre'] : demo === 'aucune' ? [] : [demo]; const done = [];
-      for (const dm of demos) { const run = { quiz: () => this.postQuiz(), coffre: () => this.postDrop(), question: () => this.postQotd(), journal: () => this.postJournal(), banniere: () => { this.L().banSlot = null; return this.updateBanner(); }, stats: () => { this.L().statT = 0; return this.updateStats(); } }[dm]; if (run) { try { await run(); done.push('✅ ' + dm); } catch (e) { done.push('❌ ' + dm + ' (' + e.message + ')'); } } }
-      if (done.length) demoTxt = `\n\n🎬 Démos lancées sur le serveur : ${done.join(' · ')}\n(stats dans 📊 EN DIRECT, bannière dans #bienvenue, journal / question / coffre dans #général, quiz dans #mini-jeux)`;
+      let banOk = false; try { banOk = !!(await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request(SITE + '/banners/day.jpg')) : fetch(SITE + '/banners/day.jpg')).then(r => r.ok)); } catch (_) {} ok('Site', 'Bannières en ligne', banOk);
+      // 5. démos : lancées après la réponse (sinon Discord abandonne l'attente)
+      const demos = !demo || demo === 'tout' ? ['stats', 'banniere', 'journal', 'question', 'quiz', 'coffre'] : demo === 'aucune' ? [] : [demo];
+      const demoTxt = demos.length ? `\n\n🎬 Démos en cours sur le serveur : ${demos.join(' · ')} (résultat juste en dessous dans quelques secondes)` : '';
+      this._demoQ = demos;
       const pass = res.filter(r => r.pass).length, secs = [...new Set(res.map(r => r.sec))];
       return { embeds: [{ color: pass === res.length ? 0x3bd16f : 0xffb84f, title: `🧪 Test du serveur : ${pass}/${res.length} OK`, description: (pass === res.length ? 'Tout fonctionne ✅' : 'Les points ❌ sont à corriger (souvent une autorisation à donner au bot).') + demoTxt,
         fields: secs.map(sec => ({ name: sec, value: res.filter(r => r.sec === sec).map(r => `${r.pass ? '✅' : '❌'} ${r.name}${r.info ? ` · ${r.info}` : ''}`).join('\n').slice(0, 1020) })) }] };
     },
 
+    async runDemos(demos, follow) {
+      const done = [];
+      for (const dm of demos) { const run = { quiz: () => this.postQuiz(), coffre: () => this.postDrop(), question: () => this.postQotd(), journal: () => this.postJournal(), banniere: () => { this.L().banSlot = null; return this.updateBanner(); }, stats: () => { this.L().statT = 0; return this.updateStats(); } }[dm];
+        if (run) { try { await run(); done.push('✅ ' + dm); } catch (e) { console.log('demo', dm, e && e.stack || e); done.push('❌ ' + dm + ' (' + String(e && e.message || e).slice(0, 80) + ')'); } } }
+      this.save(); if (follow && done.length) await follow({ content: `🎬 Démos : ${done.join(' · ')}\n(stats dans 📊 EN DIRECT, bannière dans #bienvenue, journal / question / coffre dans #général, quiz dans #mini-jeux)`, flags: 64 });
+    },
+
     // ---------------------------------------------------------------- interactions (boutons et commandes)
-    async liveCommand(d, me, reply, opt, who, isAdm, chId) {
+    async liveCommand(d, me, reply, opt, who, isAdm, chId, follow) {
       if (d.name === 'jeux') return reply(this.gamesEmbed());
       if (d.name === 'mot') {
         const w = this.L().word; if (!w || w.d !== dayKey()) return reply('Pas encore de mot mystère aujourd\'hui, reviens après 9 h !');
@@ -384,7 +390,7 @@ export function installLive(House) {
           return reply({ embeds: [{ color: 0xff4655, title: `🎯 ${t.name} · ${t.valo.name}#${t.valo.tag}`, description: `Rang : **${t.valo.rank || '?'}** · ${t.valo.rr ?? '?'} RR\nBilan suivi : ${t.stats.valoW || 0} victoires / ${t.stats.valoL || 0} défaites` }] }); }
         if (sub.name === 'classement') { const l = Object.values(this.profiles).filter(p => p.valo && p.valo.rank); return reply({ embeds: [{ color: 0xff4655, title: '🎯 Classement Valorant du serveur', description: l.sort((a, b) => (b.valo.elo || 0) - (a.valo.elo || 0)).map(p => `**${p.name}** · ${p.valo.rank} · ${p.valo.rr} RR · ${p.stats.valoW || 0}V/${p.stats.valoL || 0}D`).join('\n') || 'Personne n\'a encore lié son compte (/valo lier).' }] }); }
       }
-      if (d.name === 'test') { if (!isAdm) return reply('🔒 Réservé au boss.'); return reply(await this.selfTest(opt(d, 'demo'))); }
+      if (d.name === 'test') { if (!isAdm) return reply('🔒 Réservé au boss.'); this._demoQ = null; const rep = await this.selfTest(opt(d, 'demo')); await reply(rep); const q = this._demoQ; this._demoQ = null; if (q && q.length) await this.runDemos(q, follow); return; }
       if (d.name === 'anniv') {
         const v = (opt(d, 'date') || '').trim(), m = v.match(/^(\d{1,2})\/(\d{1,2})$/); if (!m || +m[1] > 31 || +m[2] > 12 || +m[1] < 1 || +m[2] < 1) return reply('Date invalide : écris par exemple **14/03**.');
         me.bday = `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}`; this.pushProf(me); return reply(`🎂 C'est noté : ton anniversaire est le **${me.bday}**. Le serveur te le souhaitera avec un cadeau !`);

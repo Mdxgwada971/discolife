@@ -243,7 +243,7 @@ export class House extends DurableObject {
   // ------------------------------------------------------------ connexion
   async fetch(req) {
     const path = new URL(req.url).pathname;
-    if (path === '/ix') { await this.interaction(await req.json()); return new Response('ok'); }
+    if (path === '/ix') { const ix = await req.json(); const job = this.interaction(ix).catch(e => console.log('ix err', e && e.stack || e)); if (this.ctx.waitUntil) this.ctx.waitUntil(job); return new Response('ok'); }
     if (path === '/setup') { this.ensureAlarm(); return Response.json({ ok: true }); }
     if (path === '/share') { const qs = new URL(req.url).searchParams, p = this.profiles[qs.get('u')]; if (!p) return Response.json({ error: 'profil' }, 404);
       if (this.limited(p.id, 'share', 60e3)) return Response.json({ error: 'Un partage par minute' }, 429);
@@ -594,6 +594,8 @@ export class House extends DurableObject {
   async ensureVipHub() {
     if (!this.env.BOT_TOKEN) return; const g = this.env.GUILD_ID, w = this.world;
     if (!w.vipRoleId) { const r = await this.discord('POST', `/guilds/${g}/roles`, { name: '⭐ VIP', color: 0xffd84a, hoist: true, mentionable: true }); if (r) w.vipRoleId = r.id; }
+    if (w.vipCategory && !(await this.discord('GET', `/channels/${w.vipCategory}`))) w.vipCategory = null;
+    if (w.vipChannelId && !(await this.discord('GET', `/channels/${w.vipChannelId}`))) w.vipChannelId = null;
     if (!w.vipCategory) { const cat = await this.discord('POST', `/guilds/${g}/channels`, { name: '🔒 SALONS VIP', type: 4 }); if (cat) w.vipCategory = cat.id; }
     if (!w.vipChannelId) {
       const VIEW = 1 << 10, SEND = 1 << 11, HIST = 1 << 16, CMDS = 2 ** 31;
@@ -613,7 +615,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v16'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } }
+  async setupCheck() { const V = 'v17'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
@@ -817,7 +819,7 @@ export class House extends DurableObject {
                        { name: '🏁 Courses', value: String(t.stats.races || 0), inline: true }, { name: '⚔️ Duels', value: String(t.stats.duels || 0), inline: true }, { name: '🏅 Badges', value: String(t.badges.length), inline: true }] }] });
           }
         }
-        { const r = await this.liveCommand(d, me, reply, opt, who, isAdm, ix.channel_id); if (r !== null) return r; }
+        { const r = await this.liveCommand(d, me, reply, opt, who, isAdm, ix.channel_id, follow); if (r !== null) return r; }
         return reply('Commande inconnue.');
       }
       if (ix.type === 3) {
@@ -856,7 +858,8 @@ export class House extends DurableObject {
         this.toUser(me.id, { t: 'inviteDone' });
         return reply(ok === '1' ? { content: `✅ <@${me.id}> rejoint l'équipe **${tm.name}** et a maintenant accès au salon privé 🔒 !`, components: [], allowed_mentions: { users: [] } } : { content: `❌ **${me.name}** a refusé l'invitation de **${tm.vipName}**.`, components: [] });
       }
-    } finally { this.save(); }
+    } catch (e) { console.log('interaction', ix.data && (ix.data.name || ix.data.custom_id), e && e.stack || e); try { await (ix.type === 2 ? reply : follow)({ content: '⚠️ Oups, le bot a eu un souci avec cette commande (' + String(e && e.message || e).slice(0, 150) + '). Réessaie dans un instant.', flags: 64 }); } catch (_) {} }
+    finally { this.save(); }
   }
 
   // ------------------------------------------------------------ lien avec le vrai serveur Discord (optionnel : BOT_TOKEN)
