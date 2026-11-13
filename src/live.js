@@ -402,7 +402,7 @@ export function installLive(House) {
       // 2. connexion en direct + commandes
       const S = this.srv(); ok('Connexion', 'Connexion en direct (gateway)', !!this.gwAlive(), this._gwDead ? 'erreur fatale : vérifier les intents du portail' : this._asleep ? 'en veille de nuit' : '');
       ok('Connexion', 'Salons reçus', Object.keys(S.ch).length > 0, Object.keys(S.ch).length + ' salons'); ok('Connexion', 'Membres reçus (intent membres)', Object.keys(S.mem).length > 0, Object.keys(S.mem).length + ' membres');
-      const want = ['lancer', 'liste-jeux', 'quiz-acces', 'mega-quiz', 'quiz-special', 'boutique', 'jeux-roles', 'sauvegarde', 'vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
+      const want = ['podium', 'lancer', 'liste-jeux', 'quiz-acces', 'mega-quiz', 'quiz-special', 'boutique', 'jeux-roles', 'sauvegarde', 'vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
       const miss = want.filter(n => !(cmds || []).some(c => c.name === n)); ok('Commandes', `${want.length} commandes slash`, !miss.length, miss.length ? 'manquent : ' + miss.join(', ') : '');
       // 3. salons et rôles
       const chs = chs0 || []; const ex = id => id && chs.some(c => c.id === id); const byName = re => chs.find(c => re.test(c.name));
@@ -451,6 +451,17 @@ export function installLive(House) {
     async liveCommand(d, me, reply, opt, who, isAdm, chId, follow) {
       if (d.name === 'jeux') return reply(this.gamesEmbed());
       if (d.name === 'liste-jeux') return reply(this.gamesListMsg());
+      if (d.name === 'podium') { const v = this.mgView('podium'), md = ['🥇', '🥈', '🥉'], P = Object.values(this.profiles);
+        const lst = (a, f) => a.length ? a.map((x, i) => `${md[i]} **${x.n}** · ${f(x.v)}`).join('\n') : '*Personne encore… sois le premier !*';
+        const rc = v.rec.click, rr = v.rec.race; const topBy = (k, n) => P.filter(p => (k(p) || 0) > 0).sort((a, b) => k(b) - k(a)).slice(0, n);
+        return reply({ allowed_mentions: { parse: [] }, embeds: [{ color: 0xffd84a, title: '🏆 Podium et records de La Maison',
+          description: `🎯 **Records à battre**\n⚡ Test de clic : ${rc ? `**${rc.ms} ms** par ${rc.n}` : 'aucun record, à toi de le poser !'}\n🏁 Grand Prix : ${rr ? `**${(rr.ms / 1000).toFixed(2)} s** par ${rr.n}` : 'aucun record, à toi de le poser !'}\n\nBats un record = **+30 🪙** et une annonce sur le serveur 🔥 (jouable seul dans Discolife)`,
+          fields: [{ name: '⚡ Test de clic (meilleurs temps)', value: lst(v.click, x => x + ' ms'), inline: true }, { name: '🏁 Grand Prix (chrono)', value: lst(v.race, x => (x / 1000).toFixed(2) + ' s'), inline: true },
+            { name: '⭐ Niveaux', value: topBy(p => p.lvl * 1e6 + p.xp, 3).map((p, i) => `${md[i]} **${p.name}** · niv ${p.lvl}`).join('\n') || '—', inline: true },
+            { name: '🪙 Les plus riches', value: topBy(p => p.coins, 3).map((p, i) => `${md[i]} **${p.name}** · ${p.coins} 🪙`).join('\n') || '—', inline: true },
+            { name: '🏁 Victoires au Grand Prix', value: topBy(p => (p.stats || {}).races, 3).map((p, i) => `${md[i]} **${p.name}** · ${p.stats.races}`).join('\n') || '—', inline: true }],
+          footer: { text: 'Mis à jour en direct · Discolife' } }],
+          components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Battre un record', emoji: { name: '🎯' }, custom_id: 'launch:podium' }] }] }); }
       if (d.name === 'lancer') { if (!this.canQuiz(me.id, isAdm)) return reply('🔒 Seuls le boss et les 🎲 maîtres du jeu peuvent lancer un jeu.'); const j = opt(d, 'jeu'), L = this.L(); L.lastLaunch = L.lastLaunch || {};
         if (!isAdm && Date.now() - (L.lastLaunch[j] || 0) < 20 * 60e3) return reply(`⏳ Ce jeu a déjà été lancé il y a moins de 20 min, réessaie dans ${Math.ceil((20 * 60e3 - (Date.now() - L.lastLaunch[j])) / 60e3)} min.`);
         if (j === 'quiz' && L.qs && L.qs.on) return reply('⏳ Un quiz spécial est en cours.'); L.lastLaunch[j] = Date.now(); this.save();

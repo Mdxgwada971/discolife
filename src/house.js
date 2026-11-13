@@ -584,6 +584,7 @@ export class House extends DurableObject {
                   { type: 7, name: 'salon', description: 'Le salon vocal où vous jouez (par défaut : salle-gaming)', required: false, channel_types: [2] }] },
       { name: 'classement', description: 'Classement des équipes et des joueurs Discolife', dm_permission: false },
       { name: 'lancer', description: 'Lance un jeu sur le serveur (boss et maîtres du jeu)', dm_permission: false, options: [{ type: 3, name: 'jeu', description: 'Le jeu à lancer', required: true, choices: [{ name: '⚡ Quiz express', value: 'quiz' }, { name: '🎁 Coffre surprise', value: 'coffre' }, { name: '💬 Question du jour', value: 'question' }] }] },
+      { name: 'podium', description: 'Le podium du serveur et les records à battre', dm_permission: false },
       { name: 'liste-jeux', description: 'Tous les jeux du serveur et de Discolife, avec leur commande', dm_permission: false },
       { name: 'boutique', description: 'Dépense tes pièces : couleur de pseudo, rôle Mécène…', dm_permission: false },
       { name: 'mega-quiz', description: 'Lance un méga quiz de 10 questions avec podium (boss et maîtres du jeu)', dm_permission: false, options: [{ type: 3, name: 'theme', description: 'Thème (par défaut : facile)', required: false, choices: [{ name: '🗞️ Actu de 2026', value: '2026' }, { name: '🏎️ Voitures', value: 'voiture' }, { name: '🎯 Valorant', value: 'valo' }, { name: '📚 Culture générale', value: 'culture' }, { name: '😄 Facile', value: 'easy' }, { name: '🎲 Un peu de tout', value: 'mix' }] }] },
@@ -626,7 +627,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v32'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
+  async setupCheck() { const V = 'v33'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
@@ -934,7 +935,7 @@ export class House extends DurableObject {
   }
 
   // ------------------------------------------------------------ course (2 joueurs minimum)
-  raceView() { const r = this.games.race; if (!r) return null; return { id: r.id, state: r.state, t: r.t, players: Object.values(r.players).map(x => ({ id: x.id, n: x.n, p: x.p, car: x.car, bonus: x.bonus })), order: r.order, bets: Object.values(r.bets || {}).reduce((o, b) => { o[b.on] = (o[b.on] || 0) + b.n; return o; }, {}) }; }
+  raceView() { const r = this.games.race; if (!r) return null; return { id: r.id, state: r.state, t: r.t, players: Object.values(r.players).map(x => ({ id: x.id, n: x.n, p: x.p, car: x.car, bonus: x.bonus, ms: x.ms, pb: x.pb })), order: r.order, solo: !!r.solo, bets: Object.values(r.bets || {}).reduce((o, b) => { o[b.on] = (o[b.on] || 0) + b.n; return o; }, {}) }; }
   raceJoin(p) {
     let r = this.games.race;
     if (!r || r.state === 'done') {
@@ -951,26 +952,30 @@ export class House extends DurableObject {
   }
   raceStart(id) {
     const r = this.games.race; if (!r || r.id !== id) return;
-    if (Object.keys(r.players).length < 2) { for (const [uid, b] of Object.entries(r.bets || {})) { const q = this.profiles[uid]; if (q) { q.coins += b.n; this.pushProf(q); } } r.state = 'done'; r.cancel = true; this.bcast({ t: 'race', r: { ...this.raceView(), cancel: 'Pas assez de pilotes (2 minimum)' } }); return; }
+    if (Object.keys(r.players).length === 1) r.solo = true;
+    if (!Object.keys(r.players).length) { for (const [uid, b] of Object.entries(r.bets || {})) { const q = this.profiles[uid]; if (q) { q.coins += b.n; this.pushProf(q); } } r.state = 'done'; r.cancel = true; this.bcast({ t: 'race', r: { ...this.raceView(), cancel: 'Pas assez de pilotes (2 minimum)' } }); return; }
     r.state = 'count'; r.t = Date.now() + 3000; this.bcast({ t: 'race', r: this.raceView() });
-    setTimeout(() => { r.state = 'live'; this.bcast({ t: 'race', r: this.raceView() }); r.iv = setInterval(() => this.bcast({ t: 'race', r: this.raceView() }), 200); setTimeout(() => this.raceEnd(r, true), 45000); }, 3000);
+    setTimeout(() => { r.state = 'live'; r.startAt = Date.now(); this.bcast({ t: 'race', r: this.raceView() }); r.iv = setInterval(() => this.bcast({ t: 'race', r: this.raceView() }), 200); setTimeout(() => this.raceEnd(r, true), 45000); }, 3000);
   }
   racePress(p) {
     const r = this.games.race; if (!r || r.state !== 'live') return; const x = r.players[p.id]; if (!x || x.p >= 1) return;
     const t = Date.now(); if (t - x.last < 60) return; x.last = t; x.p = Math.min(1, x.p + .02 * (1 + (x.bonus || 0) / 100));
-    if (x.p >= 1) { r.order.push(x.id); this.progress(p, 'race'); if (r.order.length === 1) { const k = 30 * this.mgMult('course'); p.coins += k; p.stats.races++; this.addXP(p, 40); this.badge(p, 'race_win'); this.log('race', p.name, `gagne le Grand Prix ! +${k} 🪙`, 'garage'); this.announce(`🏁 **${p.name}** gagne la course dans Discolife !`); this.pushProf(p); } }
+    if (x.p >= 1) { r.order.push(x.id); this.progress(p, 'race'); x.ms = t - (r.startAt || t);
+      { const old = p.stats.raceBest; if (!old || x.ms < old) { p.stats.raceBest = x.ms; x.pb = true; } const rec = this.world.records.race; if (!rec || x.ms < rec.ms) this.newRecord('race', p, x.ms, `${(x.ms / 1000).toFixed(2)} s au Grand Prix`); this.pushProf(p); this.mgB('podium'); }
+      if (r.solo) { this.raceEnd(r); return; }
+      if (r.order.length === 1) { const k = 30 * this.mgMult('course'); p.coins += k; p.stats.races++; this.addXP(p, 40); this.badge(p, 'race_win'); this.log('race', p.name, `gagne le Grand Prix ! +${k} 🪙`, 'garage'); this.announce(`🏁 **${p.name}** gagne la course dans Discolife !`); this.pushProf(p); } }
     if (r.order.length >= Math.min(3, Object.keys(r.players).length)) this.raceEnd(r);
   }
   raceEnd(r, timeout) { if (r.state === 'done') return; r.state = 'done'; clearInterval(r.iv); Object.values(r.players).sort((a, b) => b.p - a.p).forEach(x => { if (!r.order.includes(x.id)) r.order.push(x.id); }); try { this.raceSettle(r); } catch (e) { console.log('bets', e); } this.bcast({ t: 'race', r: this.raceView() }); }
 
   // ------------------------------------------------------------ test de clic (2 joueurs minimum)
-  clickView() { const c = this.games.click; if (!c) return null; return { id: c.id, state: c.state, t: c.t, players: Object.values(c.players).map(x => ({ id: x.id, n: x.n, ms: x.ms, early: x.early })) }; }
+  clickView() { const c = this.games.click; if (!c) return null; return { id: c.id, state: c.state, t: c.t, players: Object.values(c.players).map(x => ({ id: x.id, n: x.n, ms: x.ms, early: x.early, pb: x.pb })), solo: !!c.solo }; }
   clickJoin(p) {
     let c = this.games.click;
     if (!c || c.state === 'done') {
-      c = this.games.click = { id: Date.now(), state: 'lobby', t: Date.now() + 10000, players: {} };
-      this.log('click', p.name, 'lance un test de clic : 10 s pour rejoindre !', 'arcade');
-      setTimeout(() => this.clickStart(c.id), 10000);
+      c = this.games.click = { id: Date.now(), state: 'lobby', t: Date.now() + 6000, players: {} };
+      this.log('click', p.name, 'lance un test de clic : 6 s pour rejoindre (ou joue seul) !', 'arcade');
+      setTimeout(() => this.clickStart(c.id), 6000);
     }
     if (c.state !== 'lobby' || c.players[p.id]) return;
     c.players[p.id] = { id: p.id, n: p.name, ms: null, early: false };
@@ -978,7 +983,7 @@ export class House extends DurableObject {
   }
   clickStart(id) {
     const c = this.games.click; if (!c || c.id !== id) return;
-    if (Object.keys(c.players).length < 2) { c.state = 'done'; this.bcast({ t: 'click', c: { ...this.clickView(), cancel: 'Pas assez de joueurs (2 minimum)' } }); return; }
+    if (!Object.keys(c.players).length) { c.state = 'done'; return; } c.solo = Object.keys(c.players).length === 1;
     c.state = 'wait'; this.bcast({ t: 'click', c: this.clickView() });
     setTimeout(() => { c.state = 'go'; c.goAt = Date.now(); this.bcast({ t: 'click', c: this.clickView() }); setTimeout(() => this.clickEnd(c), 3500); }, rnd(1500, 4000));
   }
@@ -992,14 +997,24 @@ export class House extends DurableObject {
     if (c.state === 'done') return; c.state = 'done';
     const ranked = Object.values(c.players).filter(x => x.ms !== null).sort((a, b) => a.ms - b.ms);
     for (const x of Object.values(c.players)) this.progress(this.profiles[x.id], 'click');
+    for (const x of ranked) { const q = this.profiles[x.id]; if (q) { const old = q.stats.clickBest; if (!old || x.ms < old) { q.stats.clickBest = x.ms; x.pb = true; this.pushProf(q); } } }
+    if (ranked.length && c.solo) { const w = this.profiles[ranked[0].id]; const rec = this.world.records.click; this.addXP(w, 10);
+      if (!rec || ranked[0].ms < rec.ms) this.newRecord('click', w, ranked[0].ms, `${ranked[0].ms} ms au test de clic`); else if (ranked[0].pb) this.log('click', w.name, `améliore son record perso au test de clic : ${ranked[0].ms} ms`, 'arcade');
+      this.pushProf(w); this.bcast({ t: 'click', c: this.clickView() }); this.mgB('podium'); return; }
     if (ranked.length) {
       const w = this.profiles[ranked[0].id]; w.coins += 20; this.addXP(w, 30);
       w.stats.clickBest = Math.min(w.stats.clickBest || 9999, ranked[0].ms); if (ranked[0].ms < 250) this.badge(w, 'click_fast');
-      const rec = this.world.records.click; if (!rec || ranked[0].ms < rec.ms) { this.world.records.click = { ms: ranked[0].ms, n: w.name }; this.log('click', w.name, `bat le record du serveur au test de clic : ${ranked[0].ms} ms !`, 'arcade'); this.pushWorld(); }
+      const rec = this.world.records.click; if (!rec || ranked[0].ms < rec.ms) this.newRecord('click', w, ranked[0].ms, `${ranked[0].ms} ms au test de clic`);
       else this.log('click', w.name, `gagne le test de clic en ${ranked[0].ms} ms · +20 🪙`, 'arcade');
       this.pushProf(w);
     }
-    this.bcast({ t: 'click', c: this.clickView() });
+    this.bcast({ t: 'click', c: this.clickView() }); this.mgB('podium');
+  }
+  // nouveau record du serveur : enregistré, annoncé, +30 pièces
+  newRecord(kind, p, v, txt) {
+    const old = this.world.records[kind]; this.world.records[kind] = { ms: v, n: p.name, id: p.id, at: Date.now() }; p.coins += 30; this.pushProf(p); this.pushWorld();
+    this.log(kind === 'click' ? 'click' : 'race', p.name, `🏆 NOUVEAU RECORD DU SERVEUR : ${txt} ! +30 🪙`, kind === 'click' ? 'arcade' : 'garage');
+    this.announce(`🏆 **Nouveau record du serveur** : **${p.name}** fait ${txt}${old ? ` (ancien record : ${old.ms} ms par ${old.n})` : ''} ! À vous de le battre dans Discolife 🔥`);
   }
 }
 installGateway(House);

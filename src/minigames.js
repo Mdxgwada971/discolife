@@ -71,10 +71,13 @@ export function installMinigames(House) {
       if (g === 'dessin') { const s = M.dessin; if (!s) return null; return { id: s.id, st: s.st, round: s.round, rounds: s.rounds, t: s.t, drawer: s.drawer, hint: s.word ? s.word.replace(/[a-z]/g, '_') : null, ans: s.st !== 'draw' ? s.word : null, found: s.found, sc: s.sc, names: s.names, players: s.order }; }
       if (g === 'city') { const c = this.city(); return { lvl: c.lvl, pts: c.pts, need: cityNeed(c.lvl + 1), built: CITY.slice(0, c.lvl), next: CITY[c.lvl] || null, top: Object.entries(c.top || {}).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id, n]) => [(this.profiles[id] || {}).name || '?', n]) }; }
       if (g === 'soir') { const e = this.eveningGame(); return { k: e[0], n: e[1], room: e[2] }; }
+      if (g === 'podium') { const P = Object.values(this.profiles), R = this.world.records || {};
+        const top = (f) => P.filter(p => p.stats && p.stats[f]).sort((a, b) => a.stats[f] - b.stats[f]).slice(0, 3).map(p => ({ id: p.id, n: p.name, v: p.stats[f] }));
+        return { click: top('clickBest'), race: top('raceBest'), rec: { click: R.click || null, race: R.race || null } }; }
       return null;
     },
     mgB(g) { this.bcast({ t: 'mg', g, s: this.mgView(g) }); },
-    mgSync(ws) { for (const g of ['melodie', 'dessin', 'city', 'soir']) this.send(ws, { t: 'mg', g, s: this.mgView(g) }); const a = this.att(ws); if (a && a.id) { this.lgSendTo(a.id); const s = this.MG().dessin; if (s && s.strokes) this.send(ws, { t: 'mgDraw', id: s.id, all: s.strokes }); } },
+    mgSync(ws) { for (const g of ['melodie', 'dessin', 'city', 'soir', 'podium']) this.send(ws, { t: 'mg', g, s: this.mgView(g) }); const a = this.att(ws); if (a && a.id) { this.lgSendTo(a.id); const s = this.MG().dessin; if (s && s.strokes) this.send(ws, { t: 'mgDraw', id: s.id, all: s.strokes }); } },
 
     async mgMsg(ws, a, p, m) {
       const g = m.g; if (typeof g !== 'string') return;
