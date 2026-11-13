@@ -193,17 +193,17 @@ export function installLive(House) {
       const ch = await this.chanId(/mini-jeux/i, 0) || await this.chanId(/g[ée]n[ée]ral/i, 0); if (!ch) return '❌ Salon #mini-jeux introuvable.';
       L.qs = { on: true, id: Date.now(), n: 5, i: 0, sc: {}, ch, theme: theme === 'mix' ? 'mix' : '2026' }; if (L.quiz) L.quiz.done = true; this.save();
       await this.discord('POST', `/channels/${ch}/messages`, { content: '@here', allowed_mentions: { parse: ['everyone'] }, embeds: [{ color: 0xff4fa8, title: '🎯 QUIZ SPÉCIAL · 5 questions !',
-        description: `Lancé par **${byName}** 🎉 · thème : **${L.qs.theme === '2026' ? 'l\'actu de 2026 🗞️' : 'culture G et jeux 🎮'}**\n\n• 5 questions d'affilée, **45 secondes** chacune\n• Le premier qui répond juste ici marque **3 points** (moins s'il prend un indice)\n• Le bot dit si tu chauffes 🔥 ou refroidis 🥶\n\n🏆 Podium : **100 🪙 · 60 🪙 · 30 🪙** sur Discolife\n\n**Première question dans 10 secondes…**`,
+        description: `Lancé par **${byName}** 🎉 · thème : **${L.qs.theme === '2026' ? 'l\'actu de 2026 🗞️' : 'culture G et jeux 🎮'}**\n\n• 5 questions d'affilée, **2 minutes max** chacune (on passe à la suivante dès que quelqu'un trouve)\n• Le premier qui répond juste ici marque **3 points** (moins s'il prend un indice)\n• Le bot dit si tu chauffes 🔥 ou refroidis 🥶\n\n🏆 Podium : **100 🪙 · 60 🪙 · 30 🪙** sur Discolife\n\n**Première question dans 10 secondes…**`,
         image: { url: 'https://discolife.warren-molongo.workers.dev/gifs/annonce.gif' } }] });
       const id = L.qs.id; setTimeout(() => this.qsNext(id).catch(e => console.log('qs', e)), 10000); return `🎯 Quiz spécial lancé dans <#${ch}> !`;
     },
     async qsNext(id) {
       const L = this.L(), q = L.qs; if (!q || !q.on || q.id !== id) return; if (q.i >= q.n) return this.qsEnd();
       q.i++; const Q = q.theme === '2026' ? QUIZ_2026[this.bag('q26', QUIZ_2026.length)] : ALL_QUIZ[this.bag('quiz', ALL_QUIZ.length)];
-      await this.discord('POST', `/channels/${q.ch}/messages`, { embeds: [{ color: 0x4fe3ff, title: `❓ Question ${q.i}/${q.n}`, description: `**${Q[0]}**\n\n⏱️ 45 secondes · réponds ici !` }] });
-      L.quiz = { ch: q.ch, ans: Q[1].map(norm), show: Q[1][0], until: Date.now() + 45e3, done: false, fails: 0, hints: 0, special: true, qi: q.i }; this.save();
+      await this.discord('POST', `/channels/${q.ch}/messages`, { embeds: [{ color: 0x4fe3ff, title: `❓ Question ${q.i}/${q.n}`, description: `**${Q[0]}**\n\n⏱️ 2 minutes max · réponds ici !` }] });
+      L.quiz = { ch: q.ch, ans: Q[1].map(norm), show: Q[1][0], until: Date.now() + 120e3, done: false, fails: 0, hints: 0, special: true, qi: q.i }; this.save();
       const qi = q.i; setTimeout(async () => { const L2 = this.L(); if (L2.quiz && L2.quiz.special && L2.quiz.qi === qi && !L2.quiz.done && L2.qs && L2.qs.id === id) {
-        L2.quiz.done = true; await this.discord('POST', `/channels/${q.ch}/messages`, { content: `⌛ Temps écoulé ! La réponse était **${L2.quiz.show}**.` }); setTimeout(() => this.qsNext(id).catch(e => console.log('qs', e)), 4000); } }, 45e3);
+        L2.quiz.done = true; await this.discord('POST', `/channels/${q.ch}/messages`, { content: `⌛ Temps écoulé ! La réponse était **${L2.quiz.show}**.` }); setTimeout(() => this.qsNext(id).catch(e => console.log('qs', e)), 4000); } }, 120e3);
     },
     async qsGood(uid, ch) {
       const L = this.L(), q = L.qs; if (!q || !q.on) return; const pts = Math.max(1, 3 - (L.quiz.hints || 0)); q.sc[uid] = (q.sc[uid] || 0) + pts; this.save();
