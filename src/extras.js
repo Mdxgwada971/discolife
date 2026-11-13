@@ -163,6 +163,20 @@ export function installExtras(House) {
         if (await this.discord('PATCH', `/guilds/${this.env.GUILD_ID}`, { icon: `data:image/${want === 2 ? 'gif' : 'jpeg'};base64,` + btoa(bin) })) { X.iconV = want; this.save(); if (want === 2) this.log('info', 'La Maison', 'a maintenant une icône animée grâce aux boosts ✨'); } } catch (e) { console.log('icon', e); }
     },
 
+    // tuto vidéo « comment lancer l'activité », posté une fois dans #discolife puis épinglé
+    async postTutorial() {
+      const X = this.X(); if (X.tutoV === 1) return; const ch = this.env.ANNOUNCE_CHANNEL_ID; if (!ch) return;
+      try { const r = await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request('https://discolife.warren-molongo.workers.dev/tuto-discolife.mp4')) : fetch('https://discolife.warren-molongo.workers.dev/tuto-discolife.mp4')); if (!r.ok) return;
+        const fd = new FormData();
+        fd.append('payload_json', JSON.stringify({ content: '🎬 **Tuto : comment lancer Discolife** (30 secondes)\n**Sur PC** : rejoins un salon vocal → clique sur la fusée 🚀 « Activités » → choisis **Discolife**\n**Sur téléphone** : ouvre un salon vocal → appuie sur 🚀 → **Discolife**\n**Ou** clique sur le bouton juste en dessous, ou va sur https://discolife.warren-molongo.workers.dev',
+          components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Ouvrir Discolife', emoji: { name: '🏠' }, custom_id: 'launch:tuto' }, { type: 2, style: 5, label: 'Version navigateur', url: 'https://discolife.warren-molongo.workers.dev' }] }], attachments: [{ id: 0, filename: 'tuto-discolife.mp4' }] }));
+        fd.append('files[0]', new Blob([await r.arrayBuffer()], { type: 'video/mp4' }), 'tuto-discolife.mp4');
+        const res = await fetch(`https://discord.com/api/v10/channels/${ch}/messages`, { method: 'POST', headers: { authorization: `Bot ${this.env.BOT_TOKEN}` }, body: fd });
+        if (!res.ok) { console.log('tuto', res.status, await res.text()); return; } const m = await res.json(); X.tutoV = 1; X.tutoMsg = m.id; this.save();
+        await this.discord('PUT', `/channels/${ch}/pins/${m.id}`);
+      } catch (e) { console.log('tuto', e); }
+    },
+
     // ------------------------------------------------------------ sauvegardes
     snapshot() { return JSON.stringify({ v: 1, at: new Date().toISOString(), world: this.world, profiles: this.profiles }); },
     async backupTick(today) {
