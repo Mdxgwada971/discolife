@@ -191,7 +191,7 @@ export function installLive(House) {
     // ---------------------------------------------------------------- 🎯 quiz spécial : 5 questions d'affilée
     gamesListMsg() {
       const X = this.X(), qm = (X.quizMasters || []).map(id => `<@${id}>`).join(' ');
-      return { flags: 64, allowed_mentions: { parse: [] }, embeds: [{ color: 0xff4fa8, title: '🎮 Tous les jeux de La Maison',
+      return { allowed_mentions: { parse: [] }, embeds: [{ color: 0xff4fa8, title: '🎮 Tous les jeux de La Maison',
         description: 'Les jeux sur Discord se lancent avec une **commande** (tape `/` dans le tchat). Les jeux Discolife se jouent dans **l\'Activité** (tuto épinglé dans 🏠・discolife).',
         fields: [
           { name: '🧠 Quiz (Discord)', value: `\`/quiz-special\` · 5 questions, thèmes : actu 2026, voitures, Valorant, culture, facile\n\`/mega-quiz\` · 10 questions avec podium\n*Lancés par le boss${qm ? ' et les 🎲 maîtres du jeu ' + qm : ''}* · \`/lancer\` pour un quiz express, un coffre ou une question\n⚡ Quiz express surprise 2 fois par jour dans #mini-jeux` },
