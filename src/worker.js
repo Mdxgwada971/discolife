@@ -111,7 +111,7 @@ export default {
       const stub = env.HOUSE.get(env.HOUSE.idFromName('la-maison'));
       ctx.waitUntil(stub.fetch('https://do/ix', { method: 'POST', body }));
       if (ix.type === 3 && (ix.data?.custom_id || '').startsWith('launch:')) return json({ type: 12 }); // lance l'Activité Discolife
-      if (ix.type === 2) return json({ type: 5, data: ['equipe', 'quitter', 'retirer', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'test', 'valo', 'boutique', 'jeux-roles', 'sauvegarde', 'quiz-special', 'mega-quiz'].includes(ix.data?.name) ? { flags: 64 } : {} });
+      if (ix.type === 2) return json({ type: 5, data: ['equipe', 'quitter', 'retirer', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'test', 'valo', 'boutique', 'jeux-roles', 'sauvegarde', 'quiz-special', 'mega-quiz', 'quiz-acces'].includes(ix.data?.name) ? { flags: 64 } : {} });
       return json({ type: 6 });
     }
     if (p === '/api/share' && req.method === 'POST') { // « partager ce moment » : image du jeu postée par le bot

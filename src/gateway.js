@@ -86,7 +86,7 @@ export function installGateway(House) {
     },
     gwMem(mb) {
       const u = mb.user; if (!u || u.bot) return;
-      this.srv().mem[u.id] = { id: u.id, name: mb.nick || u.global_name || u.username, avatar: u.avatar || null };
+      this.srv().mem[u.id] = { id: u.id, name: mb.nick || u.global_name || u.username, uname: u.username, avatar: u.avatar || null };
     },
     gwPres(p, quiet) {
       const S = this.srv(), id = p.user && p.user.id; if (!id) return false;

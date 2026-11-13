@@ -329,3 +329,54 @@ export const QUIZ_EASY = [
   ['Combien font 6 + 6 ?', ['12', 'douze']], ['Quel est le contraire de « vrai » ?', ['faux']], ['Quel instrument a des cordes et se joue avec un archet ?', ['violon', 'le violon']],
   ['Quel animal porte sa maison sur son dos ?', ['escargot', 'l escargot', 'tortue', 'la tortue']], ['Quel réseau social a un logo de fantôme jaune ?', ['snapchat', 'snap']], ['De quelle couleur est le soleil sur les dessins ?', ['jaune']],
 ];
+
+// Thème voitures
+export const QUIZ_CARS = [
+  ['Quelle marque a un cheval cabré comme logo ?', ['ferrari']], ['Quelle marque italienne a un taureau comme logo ?', ['lamborghini']], ['Quelle marque a un trident comme logo ?', ['maserati']],
+  ['Quelle marque allemande a quatre anneaux comme logo ?', ['audi']], ['Quelle marque a une étoile à trois branches comme logo ?', ['mercedes', 'mercedes benz']], ['Quelle marque française a un lion comme logo ?', ['peugeot']],
+  ['Quelle marque française a un losange comme logo ?', ['renault']], ['Quelle marque a deux chevrons comme logo ?', ['citroen']], ['Quelle marque fabrique la 2CV ?', ['citroen']],
+  ['Quel constructeur fabrique la 911 ?', ['porsche']], ['Le logo de Porsche reprend les armoiries de quelle ville ?', ['stuttgart']], ['Quel constructeur japonais fabrique la GT-R ?', ['nissan']],
+  ['Quelle marque fabrique la Supra ?', ['toyota']], ['Quelle marque fabrique la Civic Type R ?', ['honda']], ['Quelle marque fabrique la RX-7 à moteur rotatif ?', ['mazda']],
+  ['Comment appelle-t-on aussi le moteur Wankel ?', ['rotatif', 'moteur rotatif']], ['Quelle marque fabrique l\'Impreza WRX STI ?', ['subaru']], ['Quelle marque américaine fabrique la Mustang ?', ['ford']],
+  ['Quelle marque américaine fabrique la Corvette ?', ['chevrolet', 'chevy']], ['Quelle marque fabrique la Chiron ?', ['bugatti']], ['Dans quel pays est née la marque Bugatti (Molsheim) ?', ['france']],
+  ['Quelle marque suédoise fabrique la Jesko ?', ['koenigsegg']], ['Quelle marque britannique fabrique les voitures de James Bond ?', ['aston martin']], ['De quel pays vient Volvo ?', ['suede', 'la suede']],
+  ['Quelle marque a une croix et un serpent dans son logo ?', ['alfa romeo', 'alfa']], ['Quelle marque fabrique la Model 3 et la Model Y ?', ['tesla']], ['Quelle marque coréenne fabrique la Ioniq 5 ?', ['hyundai']],
+  ['Quelle marque fabrique la Golf GTI ?', ['volkswagen', 'vw']], ['Quelle marque fabrique la M3 ?', ['bmw']], ['Que veut dire le M des BMW sportives ?', ['motorsport']],
+  ['Quelle division sportive de Mercedes s\'appelle par trois lettres ?', ['amg']], ['Quelle voiture voyage dans le temps dans « Retour vers le futur » ?', ['delorean', 'dmc delorean']], ['Combien de cylindres a un moteur V8 ?', ['8', 'huit']],
+  ['Quelle pièce transforme le mouvement des pistons en rotation ?', ['vilebrequin', 'le vilebrequin']], ['Que signifie ABS (en gros) ?', ['antiblocage', 'anti blocage', 'antiblocage des roues', 'anti blocage des roues']], ['Que mesure un compte-tours ?', ['regime moteur', 'tours par minute', 'tr min', 'le regime']],
+  ['Quel pilote français a été 4 fois champion du monde de F1 ?', ['prost', 'alain prost']], ['Quel pilote allemand a 7 titres de F1 ?', ['schumacher', 'michael schumacher']], ['Quelle célèbre course auto dure 24 heures en France ?', ['24 heures du mans', 'le mans', '24h du mans']],
+  ['Dans quelle ville se court le Grand Prix de Monaco ?', ['monaco', 'monte carlo']], ['Quel est le prénom du fondateur de Ferrari ?', ['enzo']], ['Quelle écurie de F1 court en rouge ?', ['ferrari']],
+  ['Quel jeu vidéo de course de Polyphony Digital est exclusif PlayStation ?', ['gran turismo', 'gt']], ['Quelle saga de films est connue pour Dom Toretto et ses voitures ?', ['fast and furious', 'fast furious', 'fast & furious']], ['Que met-on dans un moteur diesel ?', ['gazole', 'gasoil', 'diesel']],
+];
+
+// Thème Valorant
+export const QUIZ_VALO = [
+  ['Quel studio a créé Valorant ?', ['riot', 'riot games']], ['En quelle année Valorant est-il sorti ?', ['2020']], ['Combien de rounds faut-il gagner pour remporter une partie classée ?', ['13', 'treize']],
+  ['Comment s\'appelle la bombe dans Valorant ?', ['spike', 'le spike']], ['Combien de joueurs par équipe ?', ['5', 'cinq']], ['Quel est le rang le plus haut de Valorant ?', ['radiant']],
+  ['Quel rang se trouve entre Diamant et Immortel ?', ['ascendant']], ['Quel est le rang le plus bas ?', ['fer', 'iron']], ['Quelle agente peut ressusciter un coéquipier ?', ['sage']],
+  ['Quelle duelliste coréenne contrôle le vent ?', ['jett']], ['Quel initiateur russe utilise un arc et des flèches de reconnaissance ?', ['sova']], ['Quel contrôleur lance ses fumées depuis une carte tactique ?', ['brimstone']],
+  ['Quel agent de Valorant est français ?', ['chamber']], ['Quel agent marocain utilise une caméra et des fils pièges ?', ['cypher']], ['Quelle agente allemande pose une tourelle et des robots ?', ['killjoy']],
+  ['Quelle duelliste brésilienne a un lance-roquettes en ultime ?', ['raze']], ['Quelle duelliste mexicaine se soigne en absorbant des âmes ?', ['reyna']], ['Quel duelliste britannique maîtrise le feu ?', ['phoenix']],
+  ['Quel contrôleur se téléporte dans les ombres ?', ['omen']], ['Quelle contrôleuse utilise des toxines vertes ?', ['viper']], ['Quel agent robot coupe les capacités ennemies ?', ['kayo', 'kay o']],
+  ['Quelle duelliste philippine court très vite avec l\'électricité ?', ['neon']], ['Quelle agente turque traque ses ennemis avec des cauchemars ?', ['fade']], ['Quel agent indien contrôle l\'eau ?', ['harbor']],
+  ['Quel duelliste japonais crée des clones et des leurres ?', ['yoru']], ['Quel initiateur suédois envoie des secousses à travers les murs ?', ['breach']], ['Quelle agente australienne envoie un faucon aveuglant ?', ['skye']],
+  ['Combien coûte un Vandal ?', ['2900']], ['Combien coûte un Operator ?', ['4700']], ['Combien coûte un Sheriff ?', ['800']],
+  ['Quelle arme de base gratuite a-t-on au début de chaque round ?', ['classic', 'le classic']], ['Quelle map a des téléporteurs et pas de mid ?', ['bind']], ['Quelle map a trois sites de spike (la plus ancienne) ?', ['haven']],
+  ['Quelle map se déroule sous l\'eau, inspirée de Lisbonne ?', ['pearl']], ['Sur quelle map peut-on tomber dans le vide ?', ['abyss']], ['Quelle map s\'inspire de Venise ?', ['ascent']],
+  ['Quelle map se passe à Los Angeles ?', ['sunset']], ['Sur quelle map les attaquants arrivent-ils des deux côtés ?', ['fracture']], ['Quelle équipe a gagné les Valorant Champions 2026 ?', ['loud']],
+  ['Quelle équipe a gagné les Valorant Champions 2022 ?', ['loud']], ['Quelle monnaie premium achète les skins ?', ['valorant points', 'vp', 'points valorant']], ['Combien de rounds maximum avant la prolongation ?', ['24', 'vingt quatre']],
+];
+
+// Thème culture générale
+export const QUIZ_CULTURE = [
+  ['Quelle est la capitale du Japon ?', ['tokyo']], ['Quelle est la capitale du Canada ?', ['ottawa']], ['Quelle est la capitale de l\'Australie ?', ['canberra']], ['Quelle est la capitale du Brésil ?', ['brasilia']],
+  ['Quelle est la capitale du Maroc ?', ['rabat']], ['Quelle est la capitale de la Turquie ?', ['ankara']], ['Quel est le plus long fleuve de France ?', ['loire', 'la loire']], ['Quel est le plus haut sommet de France ?', ['mont blanc', 'le mont blanc']],
+  ['Quel est le plus grand pays du monde ?', ['russie', 'la russie']], ['Sur quel continent se trouve le Pérou ?', ['amerique du sud', 'amerique']], ['En quelle année a eu lieu la Révolution française ?', ['1789']], ['En quelle année a pris fin la Seconde Guerre mondiale ?', ['1945']],
+  ['Qui a peint la Joconde ?', ['leonard de vinci', 'de vinci', 'vinci', 'leonardo da vinci']], ['Qui a écrit « Les Misérables » ?', ['victor hugo', 'hugo']], ['Quel empereur français a été exilé à Sainte-Hélène ?', ['napoleon', 'napoleon bonaparte', 'bonaparte']], ['Qui a été le premier homme à marcher sur la Lune ?', ['neil armstrong', 'armstrong']],
+  ['En quelle année l\'homme a-t-il marché sur la Lune ?', ['1969']], ['Combien de planètes dans le système solaire ?', ['8', 'huit']], ['Quelle est la planète la plus proche du Soleil ?', ['mercure']], ['Quelle est la plus grosse planète du système solaire ?', ['jupiter']],
+  ['Quel est le symbole chimique de l\'or ?', ['au']], ['Quel gaz respirons-nous pour vivre ?', ['oxygene', 'l oxygene', 'o2']], ['Combien d\'os dans le corps humain adulte ?', ['206']], ['Quel organe pompe le sang ?', ['coeur', 'le coeur']],
+  ['Qui a formulé la théorie de la relativité ?', ['einstein', 'albert einstein']], ['Quelle langue parle-t-on au Brésil ?', ['portugais', 'le portugais']], ['Combien de continents compte-t-on (classiquement) ?', ['5', 'cinq', '6', '7']], ['Quelle est la monnaie du Japon ?', ['yen', 'le yen']],
+  ['Quel océan sépare l\'Europe de l\'Amérique ?', ['atlantique', 'l atlantique', 'ocean atlantique']], ['Dans quelle ville se trouve le Colisée ?', ['rome']], ['Dans quel pays se trouve le Machu Picchu ?', ['perou', 'le perou']], ['Quel pays a offert la statue de la Liberté aux États-Unis ?', ['france', 'la france']],
+  ['Combien de joueurs dans une équipe de rugby à XV ?', ['15', 'quinze']], ['Quel instrument a 88 touches ?', ['piano', 'le piano']], ['Combien de couleurs dans un arc-en-ciel ?', ['7', 'sept']], ['Quelle est la langue la plus parlée au monde (langue maternelle) ?', ['chinois', 'mandarin', 'le chinois', 'le mandarin']],
+  ['Qui a inventé l\'imprimerie en Europe ?', ['gutenberg']], ['Quel est l\'animal national de l\'Australie ?', ['kangourou', 'le kangourou']], ['Quel désert est le plus grand désert chaud du monde ?', ['sahara', 'le sahara']], ['Dans quel pays se trouve la Grande Muraille ?', ['chine', 'la chine']],
+];
