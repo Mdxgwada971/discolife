@@ -177,6 +177,21 @@ export function installExtras(House) {
       } catch (e) { console.log('tuto', e); }
     },
 
+    // annonce pour tout le monde (@everyone) avec la vidéo, une seule fois
+    async announceTutorial() {
+      const X = this.X(); if (X.tutoAnn === 1) return; const ch = this.env.GAME_CHANNEL_ID; if (!ch) return;
+      try { const r = await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request('https://discolife.warren-molongo.workers.dev/tuto-discolife.mp4')) : fetch('https://discolife.warren-molongo.workers.dev/tuto-discolife.mp4')); if (!r.ok) return;
+        const disco = this.env.ANNOUNCE_CHANNEL_ID;
+        const fd = new FormData();
+        fd.append('payload_json', JSON.stringify({ content: `@everyone 🏠 **Discolife est ouvert à tous !**\nLe jeu de La Maison se lance directement dans Discord : balade-toi dans la maison avec les autres, ton salon vocal suit ta pièce, et plein de jeux t'attendent 🎵🎨🎰🏁🐺🐾\n\n🎬 **Regarde la vidéo pour savoir comment le lancer** (30 secondes) : sur PC, sur téléphone ou dans un navigateur.\n➡️ Le tuto reste épinglé dans <#${disco}>`,
+          allowed_mentions: { parse: ['everyone'] },
+          components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Ouvrir Discolife', emoji: { name: '🏠' }, custom_id: 'launch:annonce' }, { type: 2, style: 5, label: 'Version navigateur', url: 'https://discolife.warren-molongo.workers.dev' }] }], attachments: [{ id: 0, filename: 'tuto-discolife.mp4' }] }));
+        fd.append('files[0]', new Blob([await r.arrayBuffer()], { type: 'video/mp4' }), 'tuto-discolife.mp4');
+        const res = await fetch(`https://discord.com/api/v10/channels/${ch}/messages`, { method: 'POST', headers: { authorization: `Bot ${this.env.BOT_TOKEN}` }, body: fd });
+        if (!res.ok) { console.log('tuto annonce', res.status, await res.text()); return; } X.tutoAnn = 1; this.save();
+      } catch (e) { console.log('tuto annonce', e); }
+    },
+
     // ------------------------------------------------------------ sauvegardes
     snapshot() { return JSON.stringify({ v: 1, at: new Date().toISOString(), world: this.world, profiles: this.profiles }); },
     async backupTick(today) {
