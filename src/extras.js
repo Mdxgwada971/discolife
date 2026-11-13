@@ -154,6 +154,14 @@ export function installExtras(House) {
       await wait(800);
     },
 
+    // icône du serveur (posée une fois par le bot)
+    async ensureIcon() {
+      const X = this.X(); if (X.iconV === 1) return;
+      try { const r = await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request('https://discolife.warren-molongo.workers.dev/icon-serveur.jpg')) : fetch('https://discolife.warren-molongo.workers.dev/icon-serveur.jpg'));
+        if (!r.ok) return; const b = new Uint8Array(await r.arrayBuffer()); let bin = ''; for (let i = 0; i < b.length; i += 8192) bin += String.fromCharCode(...b.subarray(i, i + 8192));
+        if (await this.discord('PATCH', `/guilds/${this.env.GUILD_ID}`, { icon: 'data:image/jpeg;base64,' + btoa(bin) })) { X.iconV = 1; this.save(); } } catch (e) { console.log('icon', e); }
+    },
+
     // ------------------------------------------------------------ sauvegardes
     snapshot() { return JSON.stringify({ v: 1, at: new Date().toISOString(), world: this.world, profiles: this.profiles }); },
     async backupTick(today) {
