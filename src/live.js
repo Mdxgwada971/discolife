@@ -192,9 +192,10 @@ export function installLive(House) {
     quizBank(t) { return ({ '2026': QUIZ_2026, voiture: QUIZ_CARS, valo: QUIZ_VALO, culture: QUIZ_CULTURE, easy: QUIZ_EASY })[t] || ALL_QUIZ; },
     quizLabel(t) { return ({ '2026': 'l\'actu de 2026 🗞️', voiture: 'voitures 🏎️', valo: 'Valorant 🎯', culture: 'culture générale 📚', easy: 'questions faciles, tout le monde peut gagner 😄', mix: 'un peu de tout 🎲' })[t] || 'un peu de tout 🎲'; },
     canQuiz(uid, isAdm) { const X = this.X(); return isAdm || (X.quizMasters || []).includes(uid); },
-    quizMasterAuto() { // donne le droit aux quiz à Walid et Fariiko dès que le bot les voit sur le serveur
+    quizMasterAuto() { // donne le droit aux quiz à Walid (pseudo Kuma) et Fariiko dès que le bot les voit sur le serveur
       const X = this.X(); X.quizMasters = X.quizMasters || []; X.qmFound = X.qmFound || {}; const mem = Object.values(this.srv().mem || {});
-      for (const [k, re] of [['walid', /walid/i], ['fariiko', /fari+k+o/i]]) { if (X.qmFound[k]) continue; const m = mem.find(x => re.test(x.name || '') || re.test(x.uname || ''));
+      if (X.qmFound.walid) { X.quizMasters = X.quizMasters.filter(x => x !== X.qmFound.walid || x === X.qmFound.kuma); delete X.qmFound.walid; }
+      for (const [k, re] of [['kuma', /kuma/i], ['fariiko', /fari+k+o/i]]) { if (X.qmFound[k]) continue; const m = mem.find(x => re.test(x.name || '') || re.test(x.uname || ''));
         if (m) { X.qmFound[k] = m.id; if (!X.quizMasters.includes(m.id)) X.quizMasters.push(m.id); this.save(); } }
     },
     async quizSpecialStart(byName, theme, mega) {
