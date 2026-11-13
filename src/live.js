@@ -2,7 +2,7 @@
 // Salons stats en direct, vocaux à la demande, question du jour, quiz express, coffres surprise, anniversaires,
 // comptage collectif, duels à mise, mot mystère, membre de la semaine, starboard automatique, journal du matin, bannière.
 import { FURN } from './social.js';
-import { QOTD2, QUIZ2, WORDS2 } from './banks.js';
+import { QOTD2, QUIZ2, WORDS2, QUIZ_2026 } from './banks.js';
 
 const QOTD = [
   'Pire jeu auquel tu as joué de ta vie ?', 'Si tu pouvais vivre dans un jeu vidéo, lequel ?', 'Ton plat préféré de tous les temps ?', 'La série que tu conseillerais à tout le monde ?',
@@ -37,7 +37,7 @@ const WORDS = ['banane', 'tornade', 'pingouin', 'galaxie', 'trompette', 'cactus'
   'licorne', 'toboggan', 'crocodile', 'escargot', 'aspirateur', 'girafe', 'brioche', 'fusee', 'chaussette', 'arcenciel', 'piscine', 'trampoline', 'hamster', 'saucisson', 'bonbon', 'pirate', 'robot',
   'raclette', 'tracteur', 'flamant', 'ananas', 'cornichon', 'grenouille', 'papillon', 'manette', 'pastèque', 'camembert', 'karaoke', 'igloo', 'requin', 'sorcier', 'trottinette', 'popcorn', 'koala'];
 const ALL_QOTD = [...new Set([...QOTD, ...QOTD2])], ALL_QUIZ = [...QUIZ, ...QUIZ2], ALL_WORDS = [...new Set([...WORDS, ...WORDS2].map(w => String(w).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '')))];
-const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9' -]/g, '').replace(/\s+/g, ' ').trim();
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['’`.-]/g, ' ').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 function lev(a, b) { const m = a.length, n = b.length; if (!m) return n; if (!n) return m; let prev = Array.from({ length: n + 1 }, (_, j) => j);
   for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; } return prev[n]; }
 // « tu chauffes / tu refroidis » : 4 niveaux, + flèche pour les nombres
@@ -117,9 +117,9 @@ export function installLive(House) {
       if (mins >= 9 * 60 && !done.journal) { done.journal = 1; await this.postJournal(); await this.birthdays(); }
       if (mins >= 18 * 60 && !done.qotd) { done.qotd = 1; await this.postQotd(); }
       if (mins >= 20 * 60 && !done.soir) { done.soir = 1; try { await this.eveningPost(); } catch (e) { console.log('soir', e); } }
-      for (let i = 0; i < L.sched.quiz.length; i++) if (mins >= L.sched.quiz[i] && !done['q' + i] && this.gwAlive()) { done['q' + i] = 1; await this.postQuiz(); }
+      for (let i = 0; i < L.sched.quiz.length; i++) if (mins >= L.sched.quiz[i] && !done['q' + i] && this.gwAlive() && !(L.qs && L.qs.on)) { done['q' + i] = 1; await this.postQuiz(); }
       for (let i = 0; i < L.sched.drop.length; i++) if (mins >= L.sched.drop[i] && !done['d' + i]) { done['d' + i] = 1; await this.postDrop(); }
-      if (L.quiz && !L.quiz.done && now > L.quiz.until) { L.quiz.done = true; await this.discord('POST', `/channels/${L.quiz.ch}/messages`, { content: `⌛ Personne n'a trouvé ! La réponse était **${L.quiz.show}**.` }); }
+      if (L.quiz && !L.quiz.done && !L.quiz.special && now > L.quiz.until) { L.quiz.done = true; await this.discord('POST', `/channels/${L.quiz.ch}/messages`, { content: `⌛ Personne n'a trouvé ! La réponse était **${L.quiz.show}**.` }); }
       // salons stats (Discord limite les renommages : au plus toutes les 6 min)
       if (L.stat && (!L.statT || now - L.statT > 6 * 60e3)) { L.statT = now; await this.updateStats(); }
       // bannière dynamique (toutes les heures)
@@ -187,6 +187,38 @@ export function installLive(House) {
       await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: 0x4fe3ff, title: '⚡ Quiz express !', description: `**${q[0]}**\n\nLe premier qui répond juste ici gagne **25 🪙** · 3 minutes !\nLe bot te dit si tu chauffes 🔥 ou si tu refroidis 🥶, et propose un indice au bout de 3 essais ratés.` }] });
       L.quiz = { ch, ans: q[1].map(norm), show: q[1][0], until: Date.now() + 180e3, done: false, fails: 0, hints: 0 };
     },
+    // ---------------------------------------------------------------- 🎯 quiz spécial : 5 questions d'affilée
+    async quizSpecialStart(byName, theme) {
+      const L = this.L(); if (L.qs && L.qs.on) return '⏳ Un quiz spécial est déjà en cours.';
+      const ch = await this.chanId(/mini-jeux/i, 0) || await this.chanId(/g[ée]n[ée]ral/i, 0); if (!ch) return '❌ Salon #mini-jeux introuvable.';
+      L.qs = { on: true, id: Date.now(), n: 5, i: 0, sc: {}, ch, theme: theme === 'mix' ? 'mix' : '2026' }; if (L.quiz) L.quiz.done = true; this.save();
+      await this.discord('POST', `/channels/${ch}/messages`, { content: '@here', allowed_mentions: { parse: ['everyone'] }, embeds: [{ color: 0xff4fa8, title: '🎯 QUIZ SPÉCIAL · 5 questions !',
+        description: `Lancé par **${byName}** 🎉 · thème : **${L.qs.theme === '2026' ? 'l\'actu de 2026 🗞️' : 'culture G et jeux 🎮'}**\n\n• 5 questions d'affilée, **45 secondes** chacune\n• Le premier qui répond juste ici marque **3 points** (moins s'il prend un indice)\n• Le bot dit si tu chauffes 🔥 ou refroidis 🥶\n\n🏆 Podium : **100 🪙 · 60 🪙 · 30 🪙** sur Discolife\n\n**Première question dans 10 secondes…**`,
+        image: { url: 'https://discolife.warren-molongo.workers.dev/gifs/annonce.gif' } }] });
+      const id = L.qs.id; setTimeout(() => this.qsNext(id).catch(e => console.log('qs', e)), 10000); return `🎯 Quiz spécial lancé dans <#${ch}> !`;
+    },
+    async qsNext(id) {
+      const L = this.L(), q = L.qs; if (!q || !q.on || q.id !== id) return; if (q.i >= q.n) return this.qsEnd();
+      q.i++; const Q = q.theme === '2026' ? QUIZ_2026[this.bag('q26', QUIZ_2026.length)] : ALL_QUIZ[this.bag('quiz', ALL_QUIZ.length)];
+      await this.discord('POST', `/channels/${q.ch}/messages`, { embeds: [{ color: 0x4fe3ff, title: `❓ Question ${q.i}/${q.n}`, description: `**${Q[0]}**\n\n⏱️ 45 secondes · réponds ici !` }] });
+      L.quiz = { ch: q.ch, ans: Q[1].map(norm), show: Q[1][0], until: Date.now() + 45e3, done: false, fails: 0, hints: 0, special: true, qi: q.i }; this.save();
+      const qi = q.i; setTimeout(async () => { const L2 = this.L(); if (L2.quiz && L2.quiz.special && L2.quiz.qi === qi && !L2.quiz.done && L2.qs && L2.qs.id === id) {
+        L2.quiz.done = true; await this.discord('POST', `/channels/${q.ch}/messages`, { content: `⌛ Temps écoulé ! La réponse était **${L2.quiz.show}**.` }); setTimeout(() => this.qsNext(id).catch(e => console.log('qs', e)), 4000); } }, 45e3);
+    },
+    async qsGood(uid, ch) {
+      const L = this.L(), q = L.qs; if (!q || !q.on) return; const pts = Math.max(1, 3 - (L.quiz.hints || 0)); q.sc[uid] = (q.sc[uid] || 0) + pts; this.save();
+      const top = Object.entries(q.sc).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([u, v], i) => `${['🥇', '🥈', '🥉', '4.', '5.'][i]} <@${u}> · ${v} pt${v > 1 ? 's' : ''}`).join('\n');
+      await this.discord('POST', `/channels/${ch}/messages`, { content: `🎉 <@${uid}> trouve **${L.quiz.show}** · **+${pts} pt${pts > 1 ? 's' : ''}**\n${top}${q.i < q.n ? '\n\nQuestion suivante dans 5 secondes…' : ''}`, allowed_mentions: { parse: [] } });
+      const id = q.id; setTimeout(() => this.qsNext(id).catch(e => console.log('qs', e)), 5000);
+    },
+    async qsEnd() {
+      const L = this.L(), q = L.qs; if (!q) return; q.on = false; const rank = Object.entries(q.sc).sort((a, b) => b[1] - a[1]); const prize = [100, 60, 30];
+      const lines = rank.slice(0, 10).map(([u, v], i) => { const g = prize[i] || 0; if (g) { const p = this.liveProfile(u); p.coins += g; this.pushProf(p); } return `${['🥇', '🥈', '🥉'][i] || `${i + 1}.`} <@${u}> · **${v} pts**${g ? ` · +${g} 🪙` : ''}`; });
+      await this.discord('POST', `/channels/${q.ch}/messages`, { embeds: [{ color: 0xffd84a, title: '🏆 Fin du quiz spécial !', description: lines.length ? `${lines.join('\n')}\n\nBravo à tous 🎉 Les pièces sont déjà sur Discolife 🪙` : 'Personne n\'a marqué de point cette fois… revanche bientôt ! 🔥',
+        image: { url: 'https://discolife.warren-molongo.workers.dev/gifs/nouveau.gif' } }], allowed_mentions: { parse: [] } });
+      if (rank[0]) this.announce(`🎯 <@${rank[0][0]}> remporte le quiz spécial sur Discord !`); this.save();
+    },
+
     async postDrop() {
       const ch = await this.chanId(/g[ée]n[ée]ral/i, 0); if (!ch) return; const L = this.L(); const id = Date.now().toString(36);
       const m = await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: 0xff8a3d, title: '🎁 Un coffre mystère vient d\'apparaître !', description: 'Le premier qui l\'ouvre repart avec le contenu : des pièces ou un meuble pour sa chambre Discolife.' }], components: [{ type: 1, components: [{ type: 2, style: 3, label: 'Ouvrir le coffre', emoji: { name: '🗝️' }, custom_id: `drop:${id}` }] }] });
@@ -227,6 +259,7 @@ export function installLive(House) {
       }
       // quiz express
       if (L.quiz && !L.quiz.done && d.channel_id === L.quiz.ch && Date.now() < L.quiz.until && L.quiz.ans.includes(norm(text))) {
+        if (L.quiz.special) { L.quiz.done = true; await this.react(d.channel_id, d.id, '✅'); return this.qsGood(uid, d.channel_id); }
         L.quiz.done = true; const gain = Math.max(10, 25 - 7 * (L.quiz.hints || 0)); const p = this.liveProfile(uid); p.coins += gain; this.pushProf(p); await this.react(d.channel_id, d.id, '🏆');
         await this.discord('POST', `/channels/${d.channel_id}/messages`, { content: `🎉 Bravo <@${uid}> ! La réponse était **${L.quiz.show}** · **+${gain} 🪙** sur Discolife${L.quiz.hints ? ` (${L.quiz.hints} indice${L.quiz.hints > 1 ? 's' : ''})` : ''}`, allowed_mentions: { users: [uid] } });
       } else if (L.quiz && !L.quiz.done && d.channel_id === L.quiz.ch && Date.now() < L.quiz.until && text.trim() && text.length <= 40) {
@@ -334,7 +367,7 @@ export function installLive(House) {
       // 2. connexion en direct + commandes
       const S = this.srv(); ok('Connexion', 'Connexion en direct (gateway)', !!this.gwAlive(), this._gwDead ? 'erreur fatale : vérifier les intents du portail' : this._asleep ? 'en veille de nuit' : '');
       ok('Connexion', 'Salons reçus', Object.keys(S.ch).length > 0, Object.keys(S.ch).length + ' salons'); ok('Connexion', 'Membres reçus (intent membres)', Object.keys(S.mem).length > 0, Object.keys(S.mem).length + ' membres');
-      const want = ['boutique', 'jeux-roles', 'sauvegarde', 'vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
+      const want = ['quiz-special', 'boutique', 'jeux-roles', 'sauvegarde', 'vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
       const miss = want.filter(n => !(cmds || []).some(c => c.name === n)); ok('Commandes', `${want.length} commandes slash`, !miss.length, miss.length ? 'manquent : ' + miss.join(', ') : '');
       // 3. salons et rôles
       const chs = chs0 || []; const ex = id => id && chs.some(c => c.id === id); const byName = re => chs.find(c => re.test(c.name));
@@ -383,6 +416,7 @@ export function installLive(House) {
     async liveCommand(d, me, reply, opt, who, isAdm, chId, follow) {
       if (d.name === 'jeux') return reply(this.gamesEmbed());
       if (d.name === 'boutique') return reply(this.shopMsg(me));
+      if (d.name === 'quiz-special') { if (!isAdm) return reply('🔒 Réservé au boss.'); return reply(await this.quizSpecialStart(me.name, opt(d, 'theme'))); }
       if (d.name === 'jeux-roles') { const X = this.X(); return reply(X.pickCh ? `🎮 Choisis tes jeux dans <#${X.pickCh}> (menu sous le message).` : this.pickerMsg()); }
       if (d.name === 'sauvegarde') { if (!isAdm) return reply('🔒 Réservé au boss.'); const okb = await this.backupFile('Sauvegarde demandée par ' + me.name); return reply(okb ? `💾 Sauvegarde envoyée dans <#${this.world.staffCh}>.` : '❌ Impossible d\'envoyer la sauvegarde (salon staff introuvable ?).'); }
       if (d.name === 'mot') {
