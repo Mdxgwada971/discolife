@@ -115,6 +115,7 @@ export function installLive(House) {
       const mins = d.getHours() * 60 + d.getMinutes(), done = L.sched.done;
       if (mins >= 9 * 60 && !done.journal) { done.journal = 1; await this.postJournal(); await this.birthdays(); }
       if (mins >= 18 * 60 && !done.qotd) { done.qotd = 1; await this.postQotd(); }
+      if (mins >= 20 * 60 && !done.soir) { done.soir = 1; try { await this.eveningPost(); } catch (e) { console.log('soir', e); } }
       for (let i = 0; i < L.sched.quiz.length; i++) if (mins >= L.sched.quiz[i] && !done['q' + i] && this.gwAlive()) { done['q' + i] = 1; await this.postQuiz(); }
       for (let i = 0; i < L.sched.drop.length; i++) if (mins >= L.sched.drop[i] && !done['d' + i]) { done['d' + i] = 1; await this.postDrop(); }
       if (L.quiz && !L.quiz.done && now > L.quiz.until) { L.quiz.done = true; await this.discord('POST', `/channels/${L.quiz.ch}/messages`, { content: `⌛ Personne n'a trouvé ! La réponse était **${L.quiz.show}**.` }); }

@@ -56,7 +56,7 @@ export function installSocial(House) {
     },
     petState(p) {
       if (!p.pet) return null; const hungry = Math.floor((Date.now() - p.pet.fed) / 864e5 * 34); // ~3 jours pour être affamé
-      const food = Math.max(0, 100 - hungry); return { k: p.pet.k, name: p.pet.name, food, sulk: food <= 0 };
+      const food = Math.max(0, 100 - hungry); return { k: p.pet.k, name: p.pet.name, food, sulk: food <= 0, lvl: Math.floor(Math.sqrt((p.pet.xp || 0) / 25)) + 1, w: p.pet.w || 0, l: p.pet.l || 0 };
     },
     homeOf(p) { if (!p.home) p.home = { items: [], gifts: [], theme: 0 }; p.home.gifts = p.home.gifts || []; return p.home; },
     pubSocial(p) {

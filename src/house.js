@@ -45,6 +45,7 @@ import { installGateway } from './gateway.js';
 import { installSocial, FURN, PETS, ACH } from './social.js';
 import { installLive } from './live.js';
 import { installExtras } from './extras.js';
+import { installMinigames } from './minigames.js';
 export class House extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
@@ -477,6 +478,7 @@ export class House extends DurableObject {
       case 'press': return this.racePress(p);
       case 'click': return this.clickJoin(p);
       case 'clickHit': return this.clickHit(p, m.ms, m.early);
+      case 'mg': return this.mgMsg(ws, a, p, m);
       case 'ping': this.send(ws, { t: 'pong' }); return;
     }
   }
@@ -926,31 +928,34 @@ export class House extends DurableObject {
   }
 
   // ------------------------------------------------------------ course (2 joueurs minimum)
-  raceView() { const r = this.games.race; if (!r) return null; return { id: r.id, state: r.state, t: r.t, players: Object.values(r.players).map(x => ({ id: x.id, n: x.n, p: x.p })), order: r.order }; }
+  raceView() { const r = this.games.race; if (!r) return null; return { id: r.id, state: r.state, t: r.t, players: Object.values(r.players).map(x => ({ id: x.id, n: x.n, p: x.p, car: x.car, bonus: x.bonus })), order: r.order, bets: Object.values(r.bets || {}).reduce((o, b) => { o[b.on] = (o[b.on] || 0) + b.n; return o; }, {}) }; }
   raceJoin(p) {
     let r = this.games.race;
     if (!r || r.state === 'done') {
-      r = this.games.race = { id: Date.now(), state: 'lobby', t: Date.now() + 12000, players: {}, order: [] };
-      this.log('race', p.name, 'ouvre une course : 12 s pour rejoindre !', 'arcade');
-      setTimeout(() => this.raceStart(r.id), 12000);
+      r = this.games.race = { id: Date.now(), state: 'lobby', t: Date.now() + 20000, players: {}, order: [], bets: {} };
+      this.log('race', p.name, 'ouvre un Grand Prix au garage : 20 s pour s\'inscrire ou parier !', 'garage');
+      setTimeout(() => this.raceStart(r.id), 20000);
     }
     if (r.state !== 'lobby' || r.players[p.id]) return;
-    r.players[p.id] = { id: p.id, n: p.name, p: 0, last: 0 };
+    const best = p.car ? p.car.model : (MODELS.filter(k => !CARS[k][1] || p.owned.includes('car_' + k)).sort((a, b) => CARS[b][1] - CARS[a][1])[0] || 'citadine');
+    const ups = ['spoiler', 'smoke', 'rims', 'neon'].filter(u => p.owned.includes(u) && (p.upOn || {})[u] !== false).length;
+    const bonus = Math.min(0.45, CARS[best][1] / 1000 * 0.3 + ups * 0.03);
+    r.players[p.id] = { id: p.id, n: p.name, p: 0, last: 0, car: MODEL_LABEL[best], bonus: Math.round(bonus * 100) };
     this.bcast({ t: 'race', r: this.raceView() });
   }
   raceStart(id) {
     const r = this.games.race; if (!r || r.id !== id) return;
-    if (Object.keys(r.players).length < 2) { r.state = 'done'; r.cancel = true; this.bcast({ t: 'race', r: { ...this.raceView(), cancel: 'Pas assez de pilotes (2 minimum)' } }); return; }
+    if (Object.keys(r.players).length < 2) { for (const [uid, b] of Object.entries(r.bets || {})) { const q = this.profiles[uid]; if (q) { q.coins += b.n; this.pushProf(q); } } r.state = 'done'; r.cancel = true; this.bcast({ t: 'race', r: { ...this.raceView(), cancel: 'Pas assez de pilotes (2 minimum)' } }); return; }
     r.state = 'count'; r.t = Date.now() + 3000; this.bcast({ t: 'race', r: this.raceView() });
     setTimeout(() => { r.state = 'live'; this.bcast({ t: 'race', r: this.raceView() }); r.iv = setInterval(() => this.bcast({ t: 'race', r: this.raceView() }), 200); setTimeout(() => this.raceEnd(r, true), 45000); }, 3000);
   }
   racePress(p) {
     const r = this.games.race; if (!r || r.state !== 'live') return; const x = r.players[p.id]; if (!x || x.p >= 1) return;
-    const t = Date.now(); if (t - x.last < 60) return; x.last = t; x.p = Math.min(1, x.p + .02);
-    if (x.p >= 1) { r.order.push(x.id); this.progress(p, 'race'); if (r.order.length === 1) { p.coins += 30; p.stats.races++; this.addXP(p, 40); this.badge(p, 'race_win'); this.log('race', p.name, 'gagne la course ! +30 🪙', 'arcade'); this.announce(`🏁 **${p.name}** gagne la course dans Discolife !`); this.pushProf(p); } }
+    const t = Date.now(); if (t - x.last < 60) return; x.last = t; x.p = Math.min(1, x.p + .02 * (1 + (x.bonus || 0) / 100));
+    if (x.p >= 1) { r.order.push(x.id); this.progress(p, 'race'); if (r.order.length === 1) { const k = 30 * this.mgMult('course'); p.coins += k; p.stats.races++; this.addXP(p, 40); this.badge(p, 'race_win'); this.log('race', p.name, `gagne le Grand Prix ! +${k} 🪙`, 'garage'); this.announce(`🏁 **${p.name}** gagne la course dans Discolife !`); this.pushProf(p); } }
     if (r.order.length >= Math.min(3, Object.keys(r.players).length)) this.raceEnd(r);
   }
-  raceEnd(r, timeout) { if (r.state === 'done') return; r.state = 'done'; clearInterval(r.iv); Object.values(r.players).sort((a, b) => b.p - a.p).forEach(x => { if (!r.order.includes(x.id)) r.order.push(x.id); }); this.bcast({ t: 'race', r: this.raceView() }); }
+  raceEnd(r, timeout) { if (r.state === 'done') return; r.state = 'done'; clearInterval(r.iv); Object.values(r.players).sort((a, b) => b.p - a.p).forEach(x => { if (!r.order.includes(x.id)) r.order.push(x.id); }); try { this.raceSettle(r); } catch (e) { console.log('bets', e); } this.bcast({ t: 'race', r: this.raceView() }); }
 
   // ------------------------------------------------------------ test de clic (2 joueurs minimum)
   clickView() { const c = this.games.click; if (!c) return null; return { id: c.id, state: c.state, t: c.t, players: Object.values(c.players).map(x => ({ id: x.id, n: x.n, ms: x.ms, early: x.early })) }; }
@@ -995,3 +1000,4 @@ installGateway(House);
 installSocial(House);
 installLive(House);
 installExtras(House);
+installMinigames(House);
