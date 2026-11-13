@@ -157,7 +157,7 @@ export function installLive(House) {
       return h >= 8 && h < 18 ? 'day' : h >= 18 && h < 21 ? 'dusk' : 'night';
     },
     async updateBanner() {
-      const L = this.L(), slot = this.bannerSlot(); if (L.banSlot === slot && L.banMsg) return; const url = `${SITE}/banners/${slot}.jpg`;
+      const L = this.L(), slot = this.bannerSlot(); if (L.banSlot === slot && L.banMsg) return; const url = `${SITE}/banners/${slot}.jpg?v=2`;
       const g = await this.discord('GET', `/guilds/${this.env.GUILD_ID}`);
       if (g && g.premium_tier >= 2) { try { const r = await this.env.ASSETS.fetch(new Request(url)); const b = new Uint8Array(await r.arrayBuffer()); let s = ''; for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); await this.discord('PATCH', `/guilds/${this.env.GUILD_ID}`, { banner: 'data:image/jpeg;base64,' + btoa(s) }); } catch (e) { console.log('banner', e); } }
       const ch = await this.chanId(/bienvenue/i, 0); if (!ch) return;
