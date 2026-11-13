@@ -189,6 +189,19 @@ export function installLive(House) {
       L.quiz = { ch, ans: q[1].map(norm), show: q[1][0], until: Date.now() + 180e3, done: false, fails: 0, hints: 0 };
     },
     // ---------------------------------------------------------------- 🎯 quiz spécial : 5 questions d'affilée
+    gamesListMsg() {
+      const X = this.X(), qm = (X.quizMasters || []).map(id => `<@${id}>`).join(' ');
+      return { flags: 64, allowed_mentions: { parse: [] }, embeds: [{ color: 0xff4fa8, title: '🎮 Tous les jeux de La Maison',
+        description: 'Les jeux sur Discord se lancent avec une **commande** (tape `/` dans le tchat). Les jeux Discolife se jouent dans **l\'Activité** (tuto épinglé dans 🏠・discolife).',
+        fields: [
+          { name: '🧠 Quiz (Discord)', value: `\`/quiz-special\` · 5 questions, thèmes : actu 2026, voitures, Valorant, culture, facile\n\`/mega-quiz\` · 10 questions avec podium\n*Lancés par le boss${qm ? ' et ' + qm : ''}*\n⚡ Quiz express surprise 2 fois par jour dans #mini-jeux` },
+          { name: '🎲 Mini-jeux (Discord)', value: '`/mot` · mot mystère du jour (le bot dit si tu chauffes 🔥)\n`/duel @membre` · duel de dés avec une mise\n🔢 #comptage · comptez ensemble sans vous tromper\n🎁 Coffres surprises · le premier qui clique gagne\n💬 Question du jour à 18 h' },
+          { name: '🏠 Dans Discolife (l\'Activité)', value: '🕹️ **Arcade** : 🎵 Devine la mélodie · 🎨 Dessine et devine · 🎰 Casino · ⚔️ Duel · ⚡ Test de clic\n🔧 **Garage** : 🏁 Grand Prix (paris possibles)\n🛋️ **Salon chill** : 🐺 Loup-garou · 🐾 Combats de pets · 🏙️ La ville\n🌟 **Jeu du soir** : pièces ×2, annoncé à 20 h' },
+          { name: '🎮 Organiser une partie', value: '`/annonce-jeu` · prévenir tout le monde qu\'on lance une partie\n`/proposer-jeu` · proposer un nouveau jeu\n`/soiree` · planifier une soirée avec rappel\n`/jeux-roles` · choisir ses jeux pour être prévenu' },
+          { name: '🪙 Pièces et profil', value: '`/boutique` · couleurs de pseudo, rôle Mécène\n`/profil` · `/classement` · `/defis`\n`/valo` · suivi des RR Valorant · `/jeux` · jeux les plus joués\n`/anniv` · ton anniversaire (cadeau le jour J)' },
+        ], footer: { text: 'Toutes les pièces gagnées sont les mêmes dans Discord et dans Discolife' } }],
+        components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Ouvrir Discolife', emoji: { name: '🏠' }, custom_id: 'launch:liste' }] }] };
+    },
     quizBank(t) { return ({ '2026': QUIZ_2026, voiture: QUIZ_CARS, valo: QUIZ_VALO, culture: QUIZ_CULTURE, easy: QUIZ_EASY })[t] || ALL_QUIZ; },
     quizLabel(t) { return ({ '2026': 'l\'actu de 2026 🗞️', voiture: 'voitures 🏎️', valo: 'Valorant 🎯', culture: 'culture générale 📚', easy: 'questions faciles, tout le monde peut gagner 😄', mix: 'un peu de tout 🎲' })[t] || 'un peu de tout 🎲'; },
     canQuiz(uid, isAdm) { const X = this.X(); return isAdm || (X.quizMasters || []).includes(uid); },
@@ -378,7 +391,7 @@ export function installLive(House) {
       // 2. connexion en direct + commandes
       const S = this.srv(); ok('Connexion', 'Connexion en direct (gateway)', !!this.gwAlive(), this._gwDead ? 'erreur fatale : vérifier les intents du portail' : this._asleep ? 'en veille de nuit' : '');
       ok('Connexion', 'Salons reçus', Object.keys(S.ch).length > 0, Object.keys(S.ch).length + ' salons'); ok('Connexion', 'Membres reçus (intent membres)', Object.keys(S.mem).length > 0, Object.keys(S.mem).length + ' membres');
-      const want = ['quiz-acces', 'mega-quiz', 'quiz-special', 'boutique', 'jeux-roles', 'sauvegarde', 'vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
+      const want = ['liste-jeux', 'quiz-acces', 'mega-quiz', 'quiz-special', 'boutique', 'jeux-roles', 'sauvegarde', 'vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
       const miss = want.filter(n => !(cmds || []).some(c => c.name === n)); ok('Commandes', `${want.length} commandes slash`, !miss.length, miss.length ? 'manquent : ' + miss.join(', ') : '');
       // 3. salons et rôles
       const chs = chs0 || []; const ex = id => id && chs.some(c => c.id === id); const byName = re => chs.find(c => re.test(c.name));
@@ -426,6 +439,7 @@ export function installLive(House) {
     // ---------------------------------------------------------------- interactions (boutons et commandes)
     async liveCommand(d, me, reply, opt, who, isAdm, chId, follow) {
       if (d.name === 'jeux') return reply(this.gamesEmbed());
+      if (d.name === 'liste-jeux') return reply(this.gamesListMsg());
       if (d.name === 'boutique') return reply(this.shopMsg(me));
       if (d.name === 'quiz-special') { if (!this.canQuiz(me.id, isAdm)) return reply('🔒 Seuls le boss et les maîtres du quiz peuvent lancer un quiz.'); return reply(await this.quizSpecialStart(me.name, opt(d, 'theme'))); }
       if (d.name === 'mega-quiz') { if (!this.canQuiz(me.id, isAdm)) return reply('🔒 Seuls le boss et les maîtres du quiz peuvent lancer un quiz.'); return reply(await this.quizSpecialStart(me.name, opt(d, 'theme') || 'easy', true)); }
