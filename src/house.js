@@ -195,7 +195,7 @@ export class House extends DurableObject {
   // soirées jeu
   eventMsg(e) {
     const list = a => a.length ? a.slice(0, 20).map(id => `<@${id}>`).join(' ') : '—'; const ts = Math.floor(e.ts / 1000);
-    return { embeds: [{ color: 0xff4fa8, title: `📅 Soirée ${e.jeu}`, description: `**${e.byName}** organise une soirée **${e.jeu}** <t:${ts}:F> (<t:${ts}:R>)` + (e.extra ? `\n> ${e.extra}` : '') + `\n\nRappel automatique 15 min avant 🔔`,
+    return { embeds: [{ color: 0xff4fa8, title: `📅 Soirée ${e.jeu}`, image: { url: 'https://discolife.warren-molongo.workers.dev/gifs/soiree.gif' }, description: `**${e.byName}** organise une soirée **${e.jeu}** <t:${ts}:F> (<t:${ts}:R>)` + (e.extra ? `\n> ${e.extra}` : '') + `\n\nRappel automatique 15 min avant 🔔`,
       fields: [{ name: `✅ Viennent (${e.yes.length})`, value: list(e.yes), inline: true }, { name: `🤔 Peut-être (${e.maybe.length})`, value: list(e.maybe), inline: true }],
       footer: { text: 'Discolife · réponds avec les boutons' } }],
       components: [{ type: 1, components: [{ type: 2, style: 3, label: 'Je viens', emoji: { name: '✅' }, custom_id: `ev:${e.id}:yes` }, { type: 2, style: 2, label: 'Peut-être', emoji: { name: '🤔' }, custom_id: `ev:${e.id}:maybe` }, { type: 2, style: 4, label: 'Je peux pas', custom_id: `ev:${e.id}:no` }] }] };
@@ -621,7 +621,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v23'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
+  async setupCheck() { const V = 'v24'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
@@ -668,7 +668,7 @@ export class House extends DurableObject {
   }
   gameCallMsg(c) {
     const who = c.who.length ? c.who.map(id => `<@${id}>`).join(' ') : '*personne pour l\'instant*';
-    return { embeds: [{ color: 0x4fe3ff, title: `🎮 ${c.jeu} · on lance une partie !`, description: c.text + (c.extra ? `\n> ${c.extra}` : ''),
+    return { embeds: [{ color: 0x4fe3ff, title: `🎮 ${c.jeu} · on lance une partie !`, description: c.text + (c.extra ? `\n> ${c.extra}` : ''), image: { url: 'https://discolife.warren-molongo.workers.dev/gifs/soiree.gif' },
       thumbnail: c.av ? { url: c.av } : undefined,
       fields: [{ name: '🔊 Où', value: c.voice ? `<#${c.voice}>` : 'en vocal', inline: true }, { name: `✋ Partants (${c.who.length})`, value: who, inline: true }],
       footer: { text: 'Clique sur « Je viens » pour rejoindre · Discolife' } }],
@@ -676,7 +676,7 @@ export class House extends DurableObject {
   }
   propMsg(c) {
     const list = a => a.length ? a.slice(0, 15).map(id => `<@${id}>`).join(' ') + (a.length > 15 ? ` +${a.length - 15}` : '') : '—';
-    return { embeds: [{ color: 0xffd84a, title: `💡 Proposition de jeu : ${c.jeu}`, url: c.link,
+    return { embeds: [{ color: 0xffd84a, title: `💡 Proposition de jeu : ${c.jeu}`, url: c.link, image: { url: 'https://discolife.warren-molongo.workers.dev/gifs/nouveau.gif' },
       description: `${c.text}\n\n📥 **[Télécharger ${c.jeu}](${c.link})** · on va bientôt y jouer ensemble !` + (c.extra ? `\n> ${c.extra}` : ''),
       thumbnail: c.av ? { url: c.av } : undefined,
       fields: [{ name: `🔥 Chauds (${c.hot.length})`, value: list(c.hot), inline: true }, { name: `📥 Téléchargé (${c.dl.length})`, value: list(c.dl), inline: true }],
@@ -695,7 +695,7 @@ export class House extends DurableObject {
   }
   async interaction(ix) {
     const W = `https://discord.com/api/v10/webhooks/${ix.application_id}/${ix.token}`;
-    const call = async (method, url, body) => { for (let i = 0; i < 4; i++) { const r = await fetch(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ allowed_mentions: { parse: [] }, ...body }) }); if (r.status !== 404) return r; await new Promise(z => setTimeout(z, 400)); } };
+    const call = async (method, url, body) => { try { body = this.animoji(body); } catch (e) {} for (let i = 0; i < 4; i++) { const r = await fetch(url, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ allowed_mentions: { parse: [] }, ...body }) }); if (r.status !== 404) return r; await new Promise(z => setTimeout(z, 400)); } };
     const reply = body => call('PATCH', W + '/messages/@original', typeof body === 'string' ? { content: body } : body);
     const follow = body => call('POST', W, body);
     const m = ix.member; if (!m) return reply('Utilise les commandes Discolife sur le serveur La Maison.');
@@ -875,6 +875,7 @@ export class House extends DurableObject {
   async discord(method, path, body) {
     if (!this.env.BOT_TOKEN) return null;
     try {
+      if (body && (method === 'POST' || method === 'PATCH') && /\/messages/.test(path)) { try { body = this.animoji(body); } catch (e) {} }
       const r = await fetch(`https://discord.com/api/v10${path}`, { method, headers: { authorization: `Bot ${this.env.BOT_TOKEN}`, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
       if (r.status === 204) return {}; const d = await r.json().catch(() => ({})); if (!r.ok) { console.log('discord', path, r.status, JSON.stringify(d)); return null; } return d;
     } catch (e) { console.log('discord err', e); return null; }

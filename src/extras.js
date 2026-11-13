@@ -22,6 +22,9 @@ export const SOUNDS = [ // fichier, nom dans le soundboard, emoji
 ];
 // son joué par la « sonnette » quand quelqu'un entre dans un vocal, selon le salon
 const BELL = [[/garage/i, 'vroom'], [/gaming/i, 'level-up'], [/arcade/i, 'coffre'], [/studio/i, 'ba-dum-tss'], [/chill/i, 'bienvenue'], [/g[ée]n[ée]ral/i, 'bienvenue'], [/salon de|🎮/i, 'klaxon'], [/🔒|place/i, 'victoire']];
+export const AEMO = ['dl_disco', 'dl_coin', 'dl_maison', 'dl_fete', 'dl_feu', 'dl_coeur', 'dl_trophee', 'dl_manette', 'dl_cloche', 'dl_fusee', 'dl_cadeau', 'dl_etoile', 'dl_micro', 'dl_coffre', 'dl_couronne'];
+// emoji normal -> emoji animé du bot (dans le texte des messages, pas dans les titres)
+const AMAP = { '🪙': 'dl_coin', '🏠': 'dl_maison', '🎉': 'dl_fete', '🔥': 'dl_feu', '❤️': 'dl_coeur', '🏆': 'dl_trophee', '🎮': 'dl_manette', '🔔': 'dl_cloche', '🚀': 'dl_fusee', '🎁': 'dl_cadeau', '⭐': 'dl_etoile', '🎤': 'dl_micro', '🧰': 'dl_coffre', '👑': 'dl_couronne', '🪩': 'dl_disco' };
 const COLOR_PRICE = 400, MECENE_PRICE = 2500, MECENE = '💎 Mécène';
 export const gameFor = txt => { const t = String(txt || '').trim(); if (!t) return null; return GAMES.find(g => g[0] !== 'autre' && g[3].test(t)) || null; };
 
@@ -190,6 +193,24 @@ export function installExtras(House) {
         const res = await fetch(`https://discord.com/api/v10/channels/${ch}/messages`, { method: 'POST', headers: { authorization: `Bot ${this.env.BOT_TOKEN}` }, body: fd });
         if (!res.ok) { console.log('tuto annonce', res.status, await res.text()); return; } X.tutoAnn = 1; this.save();
       } catch (e) { console.log('tuto annonce', e); }
+    },
+
+    // ------------------------------------------------------------ emojis animés du bot (emojis d'application : utilisables partout par le bot)
+    async ensureAppEmojis() {
+      const X = this.X(), app = this.env.CLIENT_ID; X.ae = X.ae || {};
+      const cur = await this.discord('GET', `/applications/${app}/emojis`); if (!cur) return; const list = cur.items || [];
+      for (const n of AEMO) { const ex = list.find(e => e.name === n); if (ex) { X.ae[n] = ex.id; continue; }
+        try { const r = await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request(`https://discolife.warren-molongo.workers.dev/emojis/${n}.gif`)) : fetch(`https://discolife.warren-molongo.workers.dev/emojis/${n}.gif`)); if (!r.ok) continue;
+          const b = new Uint8Array(await r.arrayBuffer()); let bin = ''; for (let i = 0; i < b.length; i += 8192) bin += String.fromCharCode(...b.subarray(i, i + 8192));
+          const made = await this.discord('POST', `/applications/${app}/emojis`, { name: n, image: 'data:image/gif;base64,' + btoa(bin) }); if (made) X.ae[n] = made.id; } catch (e) { console.log('emoji', n, e); } }
+      this.save();
+    },
+    animoji(body) { // remplace les emojis par leur version animée dans le texte d'un message
+      const ae = (this.world.x || {}).ae; if (!ae || !body || typeof body !== 'object') return body;
+      const swap = (t, max = 1900) => { if (typeof t !== 'string') return t; let o = t; for (const [u, n] of Object.entries(AMAP)) if (ae[n] && o.includes(u)) o = o.split(u).join(`<a:${n}:${ae[n]}>`); return o.length > max ? t : o; };
+      const out = { ...body }; if (out.content) out.content = swap(out.content);
+      if (Array.isArray(out.embeds)) out.embeds = out.embeds.map(e => e && ({ ...e, description: swap(e.description, 4000), fields: Array.isArray(e.fields) ? e.fields.map(f => ({ ...f, value: swap(f.value, 1000) })) : e.fields, footer: e.footer }));
+      return out;
     },
 
     // ------------------------------------------------------------ sauvegardes
