@@ -305,3 +305,27 @@ export const QUIZ_2026 = [
   ['Quelle équipe a gagné le Masters Valorant de Londres 2026 ?', ['leviatan', 'leviatán']],
   ['Quelle équipe française a gagné son premier titre VCT (EMEA Stage 2) en 2026 ?', ['karmine corp', 'kc', 'karmine']],
 ];
+
+// Questions faciles pour /mega-quiz
+export const QUIZ_EASY = [
+  ['Combien de pattes a un chat ?', ['4', 'quatre']], ['De quelle couleur est le ciel par beau temps ?', ['bleu']], ['Combien de jours dans une semaine ?', ['7', 'sept']],
+  ['Quelle est la capitale de la France ?', ['paris']], ['Combien font 2 + 2 ?', ['4', 'quatre']], ['Quel animal fait « miaou » ?', ['chat', 'le chat']],
+  ['Quel animal fait « wouf » ?', ['chien', 'le chien']], ['De quelle couleur est une banane mûre ?', ['jaune']], ['Combien de mois dans une année ?', ['12', 'douze']],
+  ['Quel fruit est rouge et on en fait du ketchup ?', ['tomate', 'la tomate']], ['Combien de doigts sur une main ?', ['5', 'cinq']], ['Quelle saison vient après l\'été ?', ['automne', 'l automne']],
+  ['Quel est le contraire de « chaud » ?', ['froid']], ['Dans quel pays se trouve la tour Eiffel ?', ['france', 'la france']], ['Combien font 10 − 3 ?', ['7', 'sept']],
+  ['Quel animal donne du lait et fait « meuh » ?', ['vache', 'la vache']], ['De quelle couleur est l\'herbe ?', ['vert', 'verte']], ['Combien de roues a un vélo ?', ['2', 'deux']],
+  ['Quelle planète habitons-nous ?', ['terre', 'la terre']], ['Quel est le premier mois de l\'année ?', ['janvier']], ['Combien font 5 × 2 ?', ['10', 'dix']],
+  ['Quel insecte fabrique du miel ?', ['abeille', 'l abeille', 'abeilles']], ['Quel est le plus grand océan du monde ?', ['pacifique', 'le pacifique', 'ocean pacifique']], ['Comment s\'appelle le bébé du chien ?', ['chiot', 'le chiot']],
+  ['Quel légume orange les lapins adorent ?', ['carotte', 'la carotte', 'carottes']], ['Combien de côtés a un triangle ?', ['3', 'trois']], ['Dans quel sport marque-t-on des paniers ?', ['basket', 'basketball', 'le basket']],
+  ['Quel est le jour après lundi ?', ['mardi']], ['Quelle couleur obtient-on avec bleu + jaune ?', ['vert']], ['Quel animal a une trompe ?', ['elephant', 'l elephant']],
+  ['Combien font 3 + 4 ?', ['7', 'sept']], ['Quel est le contraire de « petit » ?', ['grand']], ['Avec quoi écrit-on au tableau en classe ?', ['craie', 'la craie', 'feutre', 'marqueur']],
+  ['Quel est l\'animal le plus rapide sur terre ?', ['guepard', 'le guepard']], ['Quelle boisson chaude se fait avec des grains torréfiés ?', ['cafe', 'le cafe']], ['Combien d\'heures dans une journée ?', ['24', 'vingt-quatre', 'vingt quatre']],
+  ['Quel astre brille la nuit et change de forme ?', ['lune', 'la lune']], ['De quelle couleur est le lait ?', ['blanc']], ['Quel fruit pousse sur les pommiers ?', ['pomme', 'la pomme', 'pommes']],
+  ['Dans quel pays se trouvent les pyramides les plus célèbres ?', ['egypte', 'l egypte']], ['Combien de joueurs dans une équipe de foot sur le terrain ?', ['11', 'onze']], ['Quel est le contraire de « jour » ?', ['nuit', 'la nuit']],
+  ['Quelle console de Nintendo est sortie en 2017 ?', ['switch', 'nintendo switch']], ['Quel personnage de jeu vidéo est un plombier moustachu ?', ['mario']], ['Dans quel jeu construit-on avec des blocs ?', ['minecraft']],
+  ['Quel animal vit dans l\'eau et a des nageoires ?', ['poisson', 'le poisson']], ['Combien font 100 ÷ 10 ?', ['10', 'dix']], ['Quelle couleur obtient-on avec rouge + blanc ?', ['rose']],
+  ['Quel est le plus grand animal du monde ?', ['baleine bleue', 'baleine', 'la baleine bleue']], ['Quelle fête célèbre-t-on le 25 décembre ?', ['noel']], ['Combien de saisons dans une année ?', ['4', 'quatre']],
+  ['Quel oiseau ne vole pas et vit sur la banquise ?', ['manchot', 'pingouin', 'le manchot', 'le pingouin']], ['Quelle est la langue parlée en Espagne ?', ['espagnol', 'l espagnol']], ['Quel métal est jaune et précieux ?', ['or', 'l or']],
+  ['Combien font 6 + 6 ?', ['12', 'douze']], ['Quel est le contraire de « vrai » ?', ['faux']], ['Quel instrument a des cordes et se joue avec un archet ?', ['violon', 'le violon']],
+  ['Quel animal porte sa maison sur son dos ?', ['escargot', 'l escargot', 'tortue', 'la tortue']], ['Quel réseau social a un logo de fantôme jaune ?', ['snapchat', 'snap']], ['De quelle couleur est le soleil sur les dessins ?', ['jaune']],
+];
