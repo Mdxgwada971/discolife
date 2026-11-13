@@ -21,7 +21,7 @@ export const SOUNDS = [ // fichier, nom dans le soundboard, emoji
   ['bonne-reponse', 'Discolife bonne réponse', '✅'], ['buzzer', 'Discolife buzzer', '❌'], ['applaudissements', 'Discolife bravo', '👏'],
 ];
 // son joué par la « sonnette » quand quelqu'un entre dans un vocal, selon le salon
-const BELL = [[/garage/i, 'vroom'], [/gaming/i, 'level-up'], [/arcade/i, 'bonne-reponse'], [/studio/i, 'applaudissements'], [/chill/i, 'bienvenue'], [/g[ée]n[ée]ral/i, 'bienvenue'], [/salon de|🎮/i, 'klaxon'], [/🔒|place/i, 'victoire']];
+const BELL = [[/garage/i, 'vroom'], [/gaming/i, 'level-up'], [/arcade/i, 'coffre'], [/studio/i, 'ba-dum-tss'], [/chill/i, 'bienvenue'], [/g[ée]n[ée]ral/i, 'bienvenue'], [/salon de|🎮/i, 'klaxon'], [/🔒|place/i, 'victoire']];
 const COLOR_PRICE = 400, MECENE_PRICE = 2500, MECENE = '💎 Mécène';
 export const gameFor = txt => { const t = String(txt || '').trim(); if (!t) return null; return GAMES.find(g => g[0] !== 'autre' && g[3].test(t)) || null; };
 
@@ -140,8 +140,7 @@ export function installExtras(House) {
     doorbell(uid, chId) {
       const X = this.X(), L = this.L(), S = this.srv(), now = Date.now(); if (!chId || uid === this.env.CLIENT_ID || X.bellOff) return;
       const ch = S.ch[chId] || {}; if (/afk/i.test(ch.name || '') || chId === L.createVc || (L.stat && Object.values(L.stat).includes(chId))) return;
-      const h = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' })).getHours(); if (h < 9) return; // pas la nuit
-      X.bellU = X.bellU || {}; if (now - (X.bellU[uid] || 0) < 5 * 60e3) return; X.bellU[uid] = now;
+            X.bellU = X.bellU || {}; if (now - (X.bellU[uid] || 0) < 3 * 60e3) return; X.bellU[uid] = now;
       const f = (BELL.find(([re]) => re.test(ch.name || '')) || [0, 'bienvenue'])[1], sid = (X.sb || {})[f]; if (!sid || !this.gwAlive()) return;
       this._bellQ = (this._bellQ || Promise.resolve()).then(() => this.bellRun(chId, sid, f)).catch(e => console.log('bell', e));
     },
