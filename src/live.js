@@ -112,6 +112,7 @@ export function installLive(House) {
         L.word = { w: ALL_WORDS[this.bag('w', ALL_WORDS.length)], found: null, d: today };
       }
       try { await this.backupTick(today); } catch (e) { console.log('backupTick', e); }
+      if (!L.iconT || now - L.iconT > 6 * 3600e3) { L.iconT = now; try { await this.ensureIcon(); } catch (e) {} }
       const mins = d.getHours() * 60 + d.getMinutes(), done = L.sched.done;
       if (mins >= 9 * 60 && !done.journal) { done.journal = 1; await this.postJournal(); await this.birthdays(); }
       if (mins >= 18 * 60 && !done.qotd) { done.qotd = 1; await this.postQotd(); }

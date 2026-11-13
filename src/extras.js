@@ -155,11 +155,12 @@ export function installExtras(House) {
     },
 
     // icône du serveur (posée une fois par le bot)
-    async ensureIcon() {
-      const X = this.X(); if (X.iconV === 1) return;
-      try { const r = await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request('https://discolife.warren-molongo.workers.dev/icon-serveur.jpg')) : fetch('https://discolife.warren-molongo.workers.dev/icon-serveur.jpg'));
+    async ensureIcon() { // icône fixe, puis animée dès que le serveur est boosté (niveau 1)
+      const X = this.X(), g = await this.discord('GET', `/guilds/${this.env.GUILD_ID}`); if (!g) return;
+      const want = (g.premium_tier || 0) >= 1 ? 2 : 1; if (X.iconV >= want) return; const f = want === 2 ? 'icon-serveur.gif' : 'icon-serveur.jpg';
+      try { const r = await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request('https://discolife.warren-molongo.workers.dev/' + f)) : fetch('https://discolife.warren-molongo.workers.dev/' + f));
         if (!r.ok) return; const b = new Uint8Array(await r.arrayBuffer()); let bin = ''; for (let i = 0; i < b.length; i += 8192) bin += String.fromCharCode(...b.subarray(i, i + 8192));
-        if (await this.discord('PATCH', `/guilds/${this.env.GUILD_ID}`, { icon: 'data:image/jpeg;base64,' + btoa(bin) })) { X.iconV = 1; this.save(); } } catch (e) { console.log('icon', e); }
+        if (await this.discord('PATCH', `/guilds/${this.env.GUILD_ID}`, { icon: `data:image/${want === 2 ? 'gif' : 'jpeg'};base64,` + btoa(bin) })) { X.iconV = want; this.save(); if (want === 2) this.log('info', 'La Maison', 'a maintenant une icône animée grâce aux boosts ✨'); } } catch (e) { console.log('icon', e); }
     },
 
     // ------------------------------------------------------------ sauvegardes
