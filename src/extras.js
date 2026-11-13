@@ -213,6 +213,16 @@ export function installExtras(House) {
       return out;
     },
 
+    // message de test privé (salon VIP) : tous les emojis animés + les GIF d'en-tête, à valider avant de tout publier
+    async postEmojiTest() {
+      const X = this.X(), ch = this.world.vipChannelId; if (X.emoTest === 1 || !ch || !X.ae || Object.keys(X.ae).length < 10) return;
+      const all = AEMO.filter(n => X.ae[n]).map(n => `<a:${n}:${X.ae[n]}>`).join(' ');
+      const G = 'https://discolife.warren-molongo.workers.dev/gifs/';
+      const ok = await this.discord('POST', `/channels/${ch}/messages`, { content: `🧪 **Test des emojis animés Discolife** (visible seulement ici)\n${all}\n\nEn vrai dans un message : Bravo, tu gagnes 30 🪙 ! 🎉 · Soirée jeu ce soir 🎮🔥 · Nouveau record 🏆👑\nSi tout bouge, dis « validé » à Claude 👍`,
+        embeds: [{ color: 0xff4fa8, image: { url: G + 'annonce.gif' } }, { color: 0xa66bff, image: { url: G + 'soiree.gif' } }, { color: 0xffd84a, image: { url: G + 'nouveau.gif' } }] });
+      if (ok) { X.emoTest = 1; this.save(); }
+    },
+
     // ------------------------------------------------------------ sauvegardes
     snapshot() { return JSON.stringify({ v: 1, at: new Date().toISOString(), world: this.world, profiles: this.profiles }); },
     async backupTick(today) {
