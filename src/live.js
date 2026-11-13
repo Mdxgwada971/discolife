@@ -189,7 +189,7 @@ export function installLive(House) {
       const w = L.word, f = [];
       if (y) { f.push({ name: '💬 Messages', value: String(y.msgs), inline: true }, { name: '🔊 Vocal', value: `${Math.round(y.voice / 360) / 10} h`, inline: true }, { name: '🏠 Nouveaux', value: String(y.joins || 0), inline: true });
         if (topM && topM[1].m) f.push({ name: '🗣️ Le plus bavard', value: `${nm(topM[0])} · ${topM[1].m} messages`, inline: true }); if (topV && topV[1].v) f.push({ name: '🎧 Le plus en vocal', value: `${nm(topV[0])} · ${Math.round(topV[1].v / 60)} min`, inline: true }); }
-      if (w && w.d === dayKey()) f.push({ name: '🔍 Mot mystère du jour', value: `${w.w.length} lettres, commence par « ${w.w[0].toUpperCase()} ». Écris-le dans un message ou teste avec `/mot` (le bot dit si tu chauffes 🔥 ou refroidis 🥶) · **50 🪙** au premier !` });
+      if (w && w.d === dayKey()) f.push({ name: '🔍 Mot mystère du jour', value: `${w.w.length} lettres, commence par « ${w.w[0].toUpperCase()} ». Écris-le dans un message ou teste avec \`/mot\` (le bot dit si tu chauffes 🔥 ou refroidis 🥶) · **50 🪙** au premier !` });
       await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: 0xa66bff, title: '☕ Le journal de La Maison', description: y ? 'Ce qui s\'est passé hier sur le serveur :' : 'Bonne journée à tous !', fields: f, footer: { text: 'Question du jour à 18 h · coffres et quiz surprises dans la journée' } }] });
     },
     async birthdays() {
