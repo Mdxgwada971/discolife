@@ -583,11 +583,12 @@ export class House extends DurableObject {
                   { type: 3, name: 'message', description: 'Un petit mot en plus (facultatif)', required: false, max_length: 150 },
                   { type: 7, name: 'salon', description: 'Le salon vocal où vous jouez (par défaut : salle-gaming)', required: false, channel_types: [2] }] },
       { name: 'classement', description: 'Classement des équipes et des joueurs Discolife', dm_permission: false },
+      { name: 'lancer', description: 'Lance un jeu sur le serveur (boss et maîtres du jeu)', dm_permission: false, options: [{ type: 3, name: 'jeu', description: 'Le jeu à lancer', required: true, choices: [{ name: '⚡ Quiz express', value: 'quiz' }, { name: '🎁 Coffre surprise', value: 'coffre' }, { name: '💬 Question du jour', value: 'question' }] }] },
       { name: 'liste-jeux', description: 'Tous les jeux du serveur et de Discolife, avec leur commande', dm_permission: false },
       { name: 'boutique', description: 'Dépense tes pièces : couleur de pseudo, rôle Mécène…', dm_permission: false },
-      { name: 'mega-quiz', description: 'Lance un méga quiz de 10 questions avec podium (boss et maîtres du quiz)', dm_permission: false, options: [{ type: 3, name: 'theme', description: 'Thème (par défaut : facile)', required: false, choices: [{ name: '🗞️ Actu de 2026', value: '2026' }, { name: '🏎️ Voitures', value: 'voiture' }, { name: '🎯 Valorant', value: 'valo' }, { name: '📚 Culture générale', value: 'culture' }, { name: '😄 Facile', value: 'easy' }, { name: '🎲 Un peu de tout', value: 'mix' }] }] },
-      { name: 'quiz-special', description: 'Lance un quiz spécial de 5 questions avec podium (boss et maîtres du quiz)', dm_permission: false, options: [{ type: 3, name: 'theme', description: 'Thème (par défaut : actu 2026)', required: false, choices: [{ name: '🗞️ Actu de 2026', value: '2026' }, { name: '🏎️ Voitures', value: 'voiture' }, { name: '🎯 Valorant', value: 'valo' }, { name: '📚 Culture générale', value: 'culture' }, { name: '😄 Facile', value: 'easy' }, { name: '🎲 Un peu de tout', value: 'mix' }] }] },
-      { name: 'quiz-acces', description: 'Donne ou retire le droit de lancer les quiz (réservé au boss)', default_member_permissions: '8', dm_permission: false, options: [{ type: 6, name: 'membre', description: 'Le membre', required: false }, { type: 3, name: 'action', description: 'Ajouter ou retirer', required: false, choices: [{ name: 'Ajouter', value: 'ajouter' }, { name: 'Retirer', value: 'retirer' }] }] },
+      { name: 'mega-quiz', description: 'Lance un méga quiz de 10 questions avec podium (boss et maîtres du jeu)', dm_permission: false, options: [{ type: 3, name: 'theme', description: 'Thème (par défaut : facile)', required: false, choices: [{ name: '🗞️ Actu de 2026', value: '2026' }, { name: '🏎️ Voitures', value: 'voiture' }, { name: '🎯 Valorant', value: 'valo' }, { name: '📚 Culture générale', value: 'culture' }, { name: '😄 Facile', value: 'easy' }, { name: '🎲 Un peu de tout', value: 'mix' }] }] },
+      { name: 'quiz-special', description: 'Lance un quiz spécial de 5 questions avec podium (boss et maîtres du jeu)', dm_permission: false, options: [{ type: 3, name: 'theme', description: 'Thème (par défaut : actu 2026)', required: false, choices: [{ name: '🗞️ Actu de 2026', value: '2026' }, { name: '🏎️ Voitures', value: 'voiture' }, { name: '🎯 Valorant', value: 'valo' }, { name: '📚 Culture générale', value: 'culture' }, { name: '😄 Facile', value: 'easy' }, { name: '🎲 Un peu de tout', value: 'mix' }] }] },
+      { name: 'quiz-acces', description: 'Nomme ou retire un 🎲 Maître du jeu (réservé au boss)', default_member_permissions: '8', dm_permission: false, options: [{ type: 6, name: 'membre', description: 'Le membre', required: false }, { type: 3, name: 'action', description: 'Ajouter ou retirer', required: false, choices: [{ name: 'Ajouter', value: 'ajouter' }, { name: 'Retirer', value: 'retirer' }] }] },
       { name: 'jeux-roles', description: 'Choisis tes jeux pour être prévenu des parties', dm_permission: false },
       { name: 'sauvegarde', description: 'Envoie une sauvegarde complète dans le salon staff (réservé au boss)', default_member_permissions: '8', dm_permission: false },
       { name: 'profil', description: 'Voir un profil Discolife', dm_permission: false, options: [{ ...mem, required: false }] },
@@ -625,7 +626,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v31'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
+  async setupCheck() { const V = 'v32'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
@@ -762,7 +763,7 @@ export class House extends DurableObject {
                         `📣 **${me.name}** a trouvé notre prochain jeu : **${jeu}**. Téléchargez-le dès maintenant, la partie arrive bientôt 🔥`];
             const c = { id: (this.world.seq = (this.world.seq || 0) + 1).toString(36), by: me.id, byName: me.name, jeu, extra, link, text: T_[Math.floor(Math.random() * T_.length)],
               av: me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=128` : null, hot: [me.id], dl: [], t: Date.now() };
-            const ping = isAdm || !!T[me.id];
+            const ping = isAdm || !!T[me.id] || this.canQuiz(me.id, false);
             const gr = this.gameRoleMention(c.jeu); const body = { content: [ping ? '@everyone' : '', gr ? `<@&${gr.rid}>` : ''].filter(Boolean).join(' '), allowed_mentions: { parse: ping ? ['everyone'] : [], roles: gr ? [gr.rid] : [], users: [] }, ...this.propMsg(c) };
             let sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
             if (!sent && await this.ensureAnnounceRights()) sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, body);
@@ -780,7 +781,7 @@ export class House extends DurableObject {
             let ts = parisToUTC(y, mo, dd, H, Mi); if (ts < Date.now() - 60e3) { if (dm) ts = parisToUTC(y + 1, mo, dd, H, Mi); else ts += 864e5; }
             if (ts - Date.now() > 60 * 864e5) return reply('La soirée doit être dans les 60 prochains jours.');
             if (!isAdm && this.limitedP(me.id, 'soiree', 30 * 60e3)) return reply('⏳ Tu as déjà planifié une soirée il y a moins de 30 min.');
-            const ping = isAdm || !!T[me.id];
+            const ping = isAdm || !!T[me.id] || this.canQuiz(me.id, false);
             const e = { id: (this.world.seq = (this.world.seq || 0) + 1).toString(36), by: me.id, byName: me.name, jeu, extra, ts, yes: [me.id], maybe: [], ping, voice: opt(d, 'salon') || await this.gamingVoice(), reminded: ts - Date.now() < 15 * 60e3 };
             const sent = await this.discord('POST', `/channels/${this.gameChannel()}/messages`, { content: [ping ? '@everyone' : '', this.gameRoleMention(e.jeu) ? `<@&${this.gameRoleMention(e.jeu).rid}>` : ''].filter(Boolean).join(' '), allowed_mentions: { parse: ping ? ['everyone'] : [], roles: this.gameRoleMention(e.jeu) ? [this.gameRoleMention(e.jeu).rid] : [] }, ...this.eventMsg(e) });
             if (!sent) return reply('❌ Le bot n\'a pas pu poster la soirée.');
@@ -797,7 +798,7 @@ export class House extends DurableObject {
             if (!jeu) return reply('Donne le nom du jeu 🎮');
             if (!isAdm && this.limitedP(me.id, 'annjeu', 30 * 60e3)) return reply('⏳ Tu as déjà fait une annonce il y a moins de 30 min.');
             if (!isAdm && this.limitedP('all', 'annjeu', 5 * 60e3)) return reply('⏳ Une partie vient d\'être annoncée, attends quelques minutes.');
-            const pingE = isAdm || !!T[me.id];
+            const pingE = isAdm || !!T[me.id] || this.canQuiz(me.id, false);
             const T_ = [`**${me.name}** lance une partie de **${jeu}** et cherche des joueurs ! 🔥`, `Qui est chaud pour du **${jeu}** ? **${me.name}** vous attend 😎`,
                         `🚨 Partie de **${jeu}** en approche ! **${me.name}** monte une équipe, ramenez-vous`, `**${me.name}** a envie de jouer à **${jeu}**. Qui le suit ? 🎯`];
             const c = { id: (this.world.seq = (this.world.seq || 0) + 1).toString(36), by: me.id, jeu, extra, text: T_[Math.floor(Math.random() * T_.length)],

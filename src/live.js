@@ -194,7 +194,7 @@ export function installLive(House) {
       return { flags: 64, allowed_mentions: { parse: [] }, embeds: [{ color: 0xff4fa8, title: '🎮 Tous les jeux de La Maison',
         description: 'Les jeux sur Discord se lancent avec une **commande** (tape `/` dans le tchat). Les jeux Discolife se jouent dans **l\'Activité** (tuto épinglé dans 🏠・discolife).',
         fields: [
-          { name: '🧠 Quiz (Discord)', value: `\`/quiz-special\` · 5 questions, thèmes : actu 2026, voitures, Valorant, culture, facile\n\`/mega-quiz\` · 10 questions avec podium\n*Lancés par le boss${qm ? ' et ' + qm : ''}*\n⚡ Quiz express surprise 2 fois par jour dans #mini-jeux` },
+          { name: '🧠 Quiz (Discord)', value: `\`/quiz-special\` · 5 questions, thèmes : actu 2026, voitures, Valorant, culture, facile\n\`/mega-quiz\` · 10 questions avec podium\n*Lancés par le boss${qm ? ' et les 🎲 maîtres du jeu ' + qm : ''}* · \`/lancer\` pour un quiz express, un coffre ou une question\n⚡ Quiz express surprise 2 fois par jour dans #mini-jeux` },
           { name: '🎲 Mini-jeux (Discord)', value: '`/mot` · mot mystère du jour (le bot dit si tu chauffes 🔥)\n`/duel @membre` · duel de dés avec une mise\n🔢 #comptage · comptez ensemble sans vous tromper\n🎁 Coffres surprises · le premier qui clique gagne\n💬 Question du jour à 18 h' },
           { name: '🏠 Dans Discolife (l\'Activité)', value: '🕹️ **Arcade** : 🎵 Devine la mélodie · 🎨 Dessine et devine · 🎰 Casino · ⚔️ Duel · ⚡ Test de clic\n🔧 **Garage** : 🏁 Grand Prix (paris possibles)\n🛋️ **Salon chill** : 🐺 Loup-garou · 🐾 Combats de pets · 🏙️ La ville\n🌟 **Jeu du soir** : pièces ×2, annoncé à 20 h' },
           { name: '🎮 Organiser une partie', value: '`/annonce-jeu` · prévenir tout le monde qu\'on lance une partie\n`/proposer-jeu` · proposer un nouveau jeu\n`/soiree` · planifier une soirée avec rappel\n`/jeux-roles` · choisir ses jeux pour être prévenu' },
@@ -209,7 +209,15 @@ export function installLive(House) {
       const X = this.X(); X.quizMasters = X.quizMasters || []; X.qmFound = X.qmFound || {}; const mem = Object.values(this.srv().mem || {});
       if (X.qmFound.walid) { X.quizMasters = X.quizMasters.filter(x => x !== X.qmFound.walid || x === X.qmFound.kuma); delete X.qmFound.walid; }
       for (const [k, re] of [['kuma', /kuma/i], ['fariiko', /fari+k+o/i]]) { if (X.qmFound[k]) continue; const m = mem.find(x => re.test(x.name || '') || re.test(x.uname || ''));
-        if (m) { X.qmFound[k] = m.id; if (!X.quizMasters.includes(m.id)) X.quizMasters.push(m.id); this.save(); } }
+        if (m) { X.qmFound[k] = m.id; if (!X.quizMasters.includes(m.id)) X.quizMasters.push(m.id); this.save(); this.syncMasterRole().catch(() => {}); } }
+      if (!X.mjSynced && X.quizMasters.length) { X.mjSynced = 1; this.syncMasterRole().catch(() => {}); }
+    },
+    async syncMasterRole() { // rôle 🎲 Maître du jeu donné aux maîtres, retiré aux autres
+      const X = this.X(), g = this.env.GUILD_ID; const roles = await this.discord('GET', `/guilds/${g}/roles`); if (!roles) return;
+      let r = roles.find(x => x.id === X.mjRole) || roles.find(x => x.name === '🎲 Maître du jeu');
+      if (!r) r = await this.discord('POST', `/guilds/${g}/roles`, { name: '🎲 Maître du jeu', color: 0xa66bff, hoist: true, mentionable: false }); if (!r) return; X.mjRole = r.id;
+      for (const id of X.quizMasters || []) await this.discord('PUT', `/guilds/${g}/members/${id}/roles/${r.id}`);
+      for (const id of X.mjRemoved || []) await this.discord('DELETE', `/guilds/${g}/members/${id}/roles/${r.id}`); X.mjRemoved = []; this.save();
     },
     async quizSpecialStart(byName, theme, mega) {
       const L = this.L(); if (L.qs && L.qs.on) return '⏳ Un quiz (spécial ou méga) est déjà en cours.';
@@ -391,7 +399,7 @@ export function installLive(House) {
       // 2. connexion en direct + commandes
       const S = this.srv(); ok('Connexion', 'Connexion en direct (gateway)', !!this.gwAlive(), this._gwDead ? 'erreur fatale : vérifier les intents du portail' : this._asleep ? 'en veille de nuit' : '');
       ok('Connexion', 'Salons reçus', Object.keys(S.ch).length > 0, Object.keys(S.ch).length + ' salons'); ok('Connexion', 'Membres reçus (intent membres)', Object.keys(S.mem).length > 0, Object.keys(S.mem).length + ' membres');
-      const want = ['liste-jeux', 'quiz-acces', 'mega-quiz', 'quiz-special', 'boutique', 'jeux-roles', 'sauvegarde', 'vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
+      const want = ['lancer', 'liste-jeux', 'quiz-acces', 'mega-quiz', 'quiz-special', 'boutique', 'jeux-roles', 'sauvegarde', 'vip', 'recruter', 'retirer', 'equipe', 'quitter', 'classement', 'profil', 'annonce-jeu', 'proposer-jeu', 'soiree', 'defis', 'anniv', 'duel', 'test', 'jeux', 'valo'];
       const miss = want.filter(n => !(cmds || []).some(c => c.name === n)); ok('Commandes', `${want.length} commandes slash`, !miss.length, miss.length ? 'manquent : ' + miss.join(', ') : '');
       // 3. salons et rôles
       const chs = chs0 || []; const ex = id => id && chs.some(c => c.id === id); const byName = re => chs.find(c => re.test(c.name));
@@ -440,13 +448,19 @@ export function installLive(House) {
     async liveCommand(d, me, reply, opt, who, isAdm, chId, follow) {
       if (d.name === 'jeux') return reply(this.gamesEmbed());
       if (d.name === 'liste-jeux') return reply(this.gamesListMsg());
+      if (d.name === 'lancer') { if (!this.canQuiz(me.id, isAdm)) return reply('🔒 Seuls le boss et les 🎲 maîtres du jeu peuvent lancer un jeu.'); const j = opt(d, 'jeu'), L = this.L(); L.lastLaunch = L.lastLaunch || {};
+        if (!isAdm && Date.now() - (L.lastLaunch[j] || 0) < 20 * 60e3) return reply(`⏳ Ce jeu a déjà été lancé il y a moins de 20 min, réessaie dans ${Math.ceil((20 * 60e3 - (Date.now() - L.lastLaunch[j])) / 60e3)} min.`);
+        if (j === 'quiz' && L.qs && L.qs.on) return reply('⏳ Un quiz spécial est en cours.'); L.lastLaunch[j] = Date.now(); this.save();
+        if (j === 'quiz') { await this.postQuiz(); return reply('⚡ Quiz express lancé dans #mini-jeux !'); }
+        if (j === 'coffre') { await this.postDrop(); return reply('🎁 Coffre surprise lâché dans #général !'); }
+        if (j === 'question') { await this.postQotd(); return reply('💬 Question du jour postée dans #général !'); } return reply('Jeu inconnu.'); }
       if (d.name === 'boutique') return reply(this.shopMsg(me));
-      if (d.name === 'quiz-special') { if (!this.canQuiz(me.id, isAdm)) return reply('🔒 Seuls le boss et les maîtres du quiz peuvent lancer un quiz.'); return reply(await this.quizSpecialStart(me.name, opt(d, 'theme'))); }
-      if (d.name === 'mega-quiz') { if (!this.canQuiz(me.id, isAdm)) return reply('🔒 Seuls le boss et les maîtres du quiz peuvent lancer un quiz.'); return reply(await this.quizSpecialStart(me.name, opt(d, 'theme') || 'easy', true)); }
+      if (d.name === 'quiz-special') { if (!this.canQuiz(me.id, isAdm)) return reply('🔒 Seuls le boss et les 🎲 maîtres du jeu peuvent lancer un quiz.'); return reply(await this.quizSpecialStart(me.name, opt(d, 'theme'))); }
+      if (d.name === 'mega-quiz') { if (!this.canQuiz(me.id, isAdm)) return reply('🔒 Seuls le boss et les 🎲 maîtres du jeu peuvent lancer un quiz.'); return reply(await this.quizSpecialStart(me.name, opt(d, 'theme') || 'easy', true)); }
       if (d.name === 'quiz-acces') { if (!isAdm) return reply('🔒 Réservé au boss.'); const X = this.X(); X.quizMasters = X.quizMasters || []; const u = opt(d, 'membre'), act = opt(d, 'action') || 'ajouter';
-        if (!u) return reply(`🎤 Maîtres du quiz : ${X.quizMasters.length ? X.quizMasters.map(id => `<@${id}>`).join(' ') : 'personne pour l\'instant'}`);
-        if (act === 'retirer') X.quizMasters = X.quizMasters.filter(x => x !== u); else if (!X.quizMasters.includes(u)) X.quizMasters.push(u); this.save();
-        return reply(`${act === 'retirer' ? '➖' : '✅'} <@${u}> ${act === 'retirer' ? 'ne peut plus' : 'peut maintenant'} lancer \`/quiz-special\` et \`/mega-quiz\`.\nMaîtres du quiz : ${X.quizMasters.map(id => `<@${id}>`).join(' ') || 'personne'}`); }
+        if (!u) return reply(`🎲 Maîtres du jeu : ${X.quizMasters.length ? X.quizMasters.map(id => `<@${id}>`).join(' ') : 'personne pour l\'instant'}`);
+        if (act === 'retirer') { X.quizMasters = X.quizMasters.filter(x => x !== u); X.mjRemoved = [...(X.mjRemoved || []), u]; } else if (!X.quizMasters.includes(u)) X.quizMasters.push(u); this.save(); await this.syncMasterRole();
+        return reply(`${act === 'retirer' ? '➖' : '✅'} <@${u}> ${act === 'retirer' ? 'n\'est plus' : 'est maintenant'} **🎲 Maître du jeu** (quiz, méga quiz, \`/lancer\`, annonces avec notif pour tout le monde).\nMaîtres du jeu : ${X.quizMasters.map(id => `<@${id}>`).join(' ') || 'personne'}`); }
       if (d.name === 'jeux-roles') { const X = this.X(); return reply(X.pickCh ? `🎮 Choisis tes jeux dans <#${X.pickCh}> (menu sous le message).` : this.pickerMsg()); }
       if (d.name === 'sauvegarde') { if (!isAdm) return reply('🔒 Réservé au boss.'); const okb = await this.backupFile('Sauvegarde demandée par ' + me.name); return reply(okb ? `💾 Sauvegarde envoyée dans <#${this.world.staffCh}>.` : '❌ Impossible d\'envoyer la sauvegarde (salon staff introuvable ?).'); }
       if (d.name === 'mot') {
