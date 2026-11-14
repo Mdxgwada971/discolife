@@ -42,7 +42,7 @@ const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f]/g, ' ').trim().
 const rnd = (a, b) => a + Math.random() * (b - a);
 
 import { installGateway } from './gateway.js';
-import { installSocial, FURN, PETS, ACH } from './social.js';
+import { installSocial, FURN, PETS, SHINY, ACH } from './social.js';
 import { installLive } from './live.js';
 import { installExtras } from './extras.js';
 import { installMinigames } from './minigames.js';
@@ -268,7 +268,7 @@ export class House extends DurableObject {
       setTimeout(() => { this.log('daily', p.name, `bonus du jour : +${bonus} 🪙 (série de ${p.streak} jour${p.streak > 1 ? 's' : ''})`); if (p.streak >= 7) this.badge(p, 'streak7'); }, 300);
       if (!this.world.dayFirst || this.world.dayFirst.day !== today) { this.world.dayFirst = { day: today, id: p.id }; p.coins += 10; setTimeout(() => this.log('daily', p.name, '☀️ premier connecté du jour · +10 🪙'), 400); }
     }
-    this.send(pair[1], { t: 'init', me: p.id, profiles: Object.fromEntries(Object.values(this.profiles).map(x => [x.id, this.pub(x)])), online: this.online(), queue: this.world.queue, np: this.world.np, poll: this.world.poll, feed: this.world.feed.slice(-40), starboard: this.world.starboard, records: this.world.records, teams: this.world.teams, boost: this.boosted() ? this.world.boost : null, season: this.world.season || monthKey(), cv: this.carVotes(), champs: this.world.champs || [], invite: this.world.invites[p.id] || null, shop: SHOP, badges: BADGES, furn: FURN, pets: PETS, achDef: Object.fromEntries(Object.entries(ACH).map(([k, a]) => [k, { e: a[0], n: a[1], th: a[3], u: a[4] }])), fete: this.fete(), games: this.gamesState(), srv: this.srvSnapshot(), now: Date.now() });
+    this.send(pair[1], { t: 'init', me: p.id, profiles: Object.fromEntries(Object.values(this.profiles).map(x => [x.id, this.pub(x)])), online: this.online(), queue: this.world.queue, np: this.world.np, poll: this.world.poll, feed: this.world.feed.slice(-40), starboard: this.world.starboard, records: this.world.records, teams: this.world.teams, boost: this.boosted() ? this.world.boost : null, season: this.world.season || monthKey(), cv: this.carVotes(), champs: this.world.champs || [], invite: this.world.invites[p.id] || null, shop: SHOP, badges: BADGES, furn: FURN, pets: PETS, shiny: SHINY, achDef: Object.fromEntries(Object.entries(ACH).map(([k, a]) => [k, { e: a[0], n: a[1], th: a[3], u: a[4] }])), fete: this.fete(), games: this.gamesState(), srv: this.srvSnapshot(), now: Date.now() });
     this.pushProf(p);
     this.bcast({ t: 'pres', online: this.online() });
     if (this._new) { this._new = false; setTimeout(() => this.log('welcome', p.name, `arrive pour la première fois dans Discolife ! Bienvenue 🏠`), 200); }
@@ -939,19 +939,21 @@ export class House extends DurableObject {
   raceJoin(p) {
     let r = this.games.race;
     if (!r || r.state === 'done') {
-      r = this.games.race = { id: Date.now(), state: 'lobby', t: Date.now() + 20000, players: {}, order: [], bets: {} };
-      this.log('race', p.name, 'ouvre un Grand Prix au garage : 20 s pour s\'inscrire ou parier !', 'garage');
-      setTimeout(() => this.raceStart(r.id), 20000);
+      r = this.games.race = { id: Date.now(), state: 'lobby', t: Date.now() + 25000, players: {}, order: [], bets: {} };
+      this.log('race', p.name, 'ouvre un Grand Prix au garage : 25 s pour s\'inscrire ou parier !', 'garage');
+      setTimeout(() => this.raceStart(r.id), 25000);
     }
     if (r.state !== 'lobby' || r.players[p.id]) return;
     const best = p.car ? p.car.model : (MODELS.filter(k => !CARS[k][1] || p.owned.includes('car_' + k)).sort((a, b) => CARS[b][1] - CARS[a][1])[0] || 'citadine');
     const ups = ['spoiler', 'smoke', 'rims', 'neon'].filter(u => p.owned.includes(u) && (p.upOn || {})[u] !== false).length;
     const bonus = Math.min(0.45, CARS[best][1] / 1000 * 0.3 + ups * 0.03);
     r.players[p.id] = { id: p.id, n: p.name, p: 0, last: 0, car: MODEL_LABEL[best], bonus: Math.round(bonus * 100) };
+    if (r.t - Date.now() < 6000 && r.t - r.id < 45000) r.t = Math.min(r.id + 45000, Date.now() + 6000);
     this.bcast({ t: 'race', r: this.raceView() });
   }
   raceStart(id) {
-    const r = this.games.race; if (!r || r.id !== id) return;
+    const r = this.games.race; if (!r || r.id !== id || r.state !== 'lobby') return;
+    if (Date.now() < r.t - 150) { setTimeout(() => this.raceStart(id), r.t - Date.now()); return; }
     if (Object.keys(r.players).length === 1) r.solo = true;
     if (!Object.keys(r.players).length) { for (const [uid, b] of Object.entries(r.bets || {})) { const q = this.profiles[uid]; if (q) { q.coins += b.n; this.pushProf(q); } } r.state = 'done'; r.cancel = true; this.bcast({ t: 'race', r: { ...this.raceView(), cancel: 'Pas assez de pilotes (2 minimum)' } }); return; }
     r.state = 'count'; r.t = Date.now() + 3000; this.bcast({ t: 'race', r: this.raceView() });
@@ -969,20 +971,23 @@ export class House extends DurableObject {
   raceEnd(r, timeout) { if (r.state === 'done') return; r.state = 'done'; clearInterval(r.iv); Object.values(r.players).sort((a, b) => b.p - a.p).forEach(x => { if (!r.order.includes(x.id)) r.order.push(x.id); }); try { this.raceSettle(r); } catch (e) { console.log('bets', e); } this.bcast({ t: 'race', r: this.raceView() }); }
 
   // ------------------------------------------------------------ test de clic (2 joueurs minimum)
-  clickView() { const c = this.games.click; if (!c) return null; return { id: c.id, state: c.state, t: c.t, players: Object.values(c.players).map(x => ({ id: x.id, n: x.n, ms: x.ms, early: x.early, pb: x.pb })), solo: !!c.solo }; }
+  clickView() { const c = this.games.click; if (!c) return null; return { id: c.id, state: c.state, t: c.t, players: Object.values(c.players).map(x => ({ id: x.id, n: x.n, ms: x.ms, early: x.early, pb: x.pb })), solo: !!c.solo, endAt: c.endAt || 0 }; }
   clickJoin(p) {
     let c = this.games.click;
+    if (c && c.state === 'done' && Date.now() - (c.endAt || 0) < 3000) return; // tapes en trop juste après la fin : ne relance pas une partie
     if (!c || c.state === 'done') {
-      c = this.games.click = { id: Date.now(), state: 'lobby', t: Date.now() + 6000, players: {} };
-      this.log('click', p.name, 'lance un test de clic : 6 s pour rejoindre (ou joue seul) !', 'arcade');
-      setTimeout(() => this.clickStart(c.id), 6000);
+      c = this.games.click = { id: Date.now(), state: 'lobby', t: Date.now() + 10000, players: {} };
+      this.log('click', p.name, 'lance un test de clic : 10 s pour rejoindre (ou joue seul) !', 'arcade');
+      setTimeout(() => this.clickStart(c.id), 10000);
     }
     if (c.state !== 'lobby' || c.players[p.id]) return;
     c.players[p.id] = { id: p.id, n: p.name, ms: null, early: false };
+    if (c.t - Date.now() < 4000 && c.t - c.id < 20000) c.t = Math.min(c.id + 20000, Date.now() + 4000);
     this.bcast({ t: 'click', c: this.clickView() });
   }
   clickStart(id) {
-    const c = this.games.click; if (!c || c.id !== id) return;
+    const c = this.games.click; if (!c || c.id !== id || c.state !== 'lobby') return;
+    if (Date.now() < c.t - 150) { setTimeout(() => this.clickStart(id), c.t - Date.now()); return; }
     if (!Object.keys(c.players).length) { c.state = 'done'; return; } c.solo = Object.keys(c.players).length === 1;
     c.state = 'wait'; this.bcast({ t: 'click', c: this.clickView() });
     setTimeout(() => { c.state = 'go'; c.goAt = Date.now(); this.bcast({ t: 'click', c: this.clickView() }); setTimeout(() => this.clickEnd(c), 3500); }, rnd(1500, 4000));
@@ -994,7 +999,7 @@ export class House extends DurableObject {
     if (Object.values(c.players).every(y => y.ms !== null || y.early)) this.clickEnd(c);
   }
   clickEnd(c) {
-    if (c.state === 'done') return; c.state = 'done';
+    if (c.state === 'done') return; c.state = 'done'; c.endAt = Date.now();
     const ranked = Object.values(c.players).filter(x => x.ms !== null).sort((a, b) => a.ms - b.ms);
     for (const x of Object.values(c.players)) this.progress(this.profiles[x.id], 'click');
     for (const x of ranked) { const q = this.profiles[x.id]; if (q) { const old = q.stats.clickBest; if (!old || x.ms < old) { q.stats.clickBest = x.ms; x.pb = true; this.pushProf(q); } } }

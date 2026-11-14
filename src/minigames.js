@@ -39,7 +39,8 @@ export const DRAW_WORDS = ['voiture', 'maison', 'chat', 'chien', 'soleil', 'pizz
   'oeuf', 'dinosaure', 'licorne', 'sirene', 'pirate', 'ninja', 'zombie', 'vampire', 'alien', 'ovni', 'arc en ciel', 'bonhomme de neige', 'sapin', 'citrouille', 'micro', 'piano', 'tambour'];
 
 // ------------------------------------------------------------------ combats de pets
-const PET_STATS = { cat: [32, 7, 3], dog: [36, 6, 4], bunny: [30, 6, 5], fox: [33, 8, 4], panda: [42, 6, 5], dragon: [38, 9, 4] };
+const PET_STATS = { hamster: [28, 6, 3], cat: [32, 7, 3], dog: [36, 6, 4], turtle: [40, 5, 6], bunny: [30, 6, 5], fox: [33, 8, 4], penguin: [35, 7, 4], owl: [31, 8, 4], koala: [38, 6, 5], panda: [42, 6, 5], wolf: [38, 9, 4], tiger: [40, 9, 4], unicorn: [40, 8, 6], trex: [44, 9, 5], dragon: [42, 10, 5] };
+const SHINY_BONUS = { '': 1, s: 1.05, g: 1.1, r: 1.15 };
 const petLvl = xp => Math.floor(Math.sqrt((xp || 0) / 25)) + 1;
 
 // ------------------------------------------------------------------ ville commune
@@ -101,7 +102,7 @@ export function installMinigames(House) {
           this.log('info', p.name, 'lance 🎵 Devine la mélodie à l\'arcade : 15 s pour rejoindre !', 'arcade');
           setTimeout(() => this.melodieNext(s.id), 15000);
         }
-        if (!(p.id in s.sc)) { s.sc[p.id] = 0; s.names[p.id] = p.name; } return this.mgB('melodie');
+        if (!(p.id in s.sc)) { s.sc[p.id] = 0; s.names[p.id] = p.name; if (s.st === 'lobby' && s.t - Date.now() < 5000 && s.t - s.id < 30000) s.t = Math.min(s.id + 30000, Date.now() + 5000); } return this.mgB('melodie');
       }
       if (m.a === 'guess') {
         if (!s || s.st !== 'play' || !(p.id in s.sc) || s.found) return; if (this.limited(p.id, 'mel', 600)) return;
@@ -111,6 +112,7 @@ export function installMinigames(House) {
     },
     melodieNext(id) {
       const s = this.MG().melodie; if (!s || s.id !== id) return;
+      if (s.st === 'lobby' && Date.now() < s.t - 150) { setTimeout(() => this.melodieNext(id), s.t - Date.now()); return; }
       if (s.round >= s.rounds) return this.melodieEnd(s);
       s.tune = TUNES[s.order[s.round]]; s.round++; s.found = null; s.st = 'play'; s.t = Date.now() + 25000; this.mgB('melodie');
       const r = s.round; setTimeout(() => { if (s.st === 'play' && s.round === r) this.melodieReveal(s); }, 25000);
@@ -132,7 +134,7 @@ export function installMinigames(House) {
           this.log('info', p.name, 'lance 🎨 Dessine et devine à l\'arcade : 20 s pour rejoindre !', 'arcade');
           setTimeout(() => this.dessinNext(s.id), 20000);
         }
-        if (!(p.id in s.sc)) { s.sc[p.id] = 0; s.names[p.id] = p.name; if (s.st === 'lobby') s.order.push(p.id); } return this.mgB('dessin');
+        if (!(p.id in s.sc)) { s.sc[p.id] = 0; s.names[p.id] = p.name; if (s.st === 'lobby') { s.order.push(p.id); if (s.t - Date.now() < 5000 && s.t - s.id < 35000) s.t = Math.min(s.id + 35000, Date.now() + 5000); } } return this.mgB('dessin');
       }
       if (!s) return;
       if (m.a === 'draw') { // lots de traits envoyés par le dessinateur
@@ -151,6 +153,7 @@ export function installMinigames(House) {
     },
     dessinNext(id) {
       const s = this.MG().dessin; if (!s || s.id !== id) return;
+      if (s.st === 'lobby' && Date.now() < s.t - 150) { setTimeout(() => this.dessinNext(id), s.t - Date.now()); return; }
       if (s.st === 'lobby') { if (s.order.length < 2) { s.st = 'end'; s.cancel = 'Il faut au moins 2 joueurs'; this.bcast({ t: 'mg', g: 'dessin', s: { ...this.mgView('dessin'), cancel: s.cancel } }); return; } s.rounds = Math.min(8, s.order.length * (s.order.length <= 3 ? 2 : 1)); }
       if (s.round >= s.rounds) return this.dessinEnd(s);
       s.drawer = s.order[s.round % s.order.length]; s.round++; s.word = DRAW_WORDS[rnd(DRAW_WORDS.length)]; s.found = []; s.strokes = []; s.st = 'draw'; s.t = Date.now() + 70000;
@@ -224,7 +227,7 @@ export function installMinigames(House) {
       const M = this.MG(); let s = M.lg;
       if (m.a === 'join') {
         if (!s || s.st === 'end') { s = M.lg = { id: Date.now(), st: 'lobby', t: 0, host: p.id, pl: {}, order: [], log: ['🌙 Une partie de Loup-garou se prépare au salon…'], day: 0, votes: {}, wv: {} }; this.log('info', p.name, 'ouvre une table de 🐺 Loup-garou au salon (4 joueurs minimum)', 'chill'); }
-        if (s.st !== 'lobby' || s.pl[p.id] || s.order.length >= 12) return; s.pl[p.id] = { n: p.name, alive: true, role: null }; s.order.push(p.id); return this.lgB();
+        if (s.st !== 'lobby' || s.pl[p.id] || s.order.length >= 20) return; s.pl[p.id] = { n: p.name, alive: true, role: null }; s.order.push(p.id); return this.lgB();
       }
       if (!s) return;
       if (m.a === 'leave' && s.st === 'lobby') { delete s.pl[p.id]; s.order = s.order.filter(x => x !== p.id); if (!s.order.length) M.lg = null; else if (s.host === p.id) s.host = s.order[0]; return this.lgB(); }
@@ -235,7 +238,7 @@ export function installMinigames(House) {
       if (m.a === 'vote' && s.st === 'vote') { s.votes[p.id] = m.to; this.lgB(); if (s.order.filter(id => s.pl[id].alive).every(id => s.votes[id])) this.lgEndVote(s); }
     },
     lgStart(s) {
-      const n = s.order.length, roles = []; const wolves = n >= 8 ? 2 : 1; for (let i = 0; i < wolves; i++) roles.push('loup'); roles.push('voyante'); while (roles.length < n) roles.push('villageois');
+      const n = s.order.length, roles = []; const wolves = n >= 15 ? 3 : n >= 8 ? 2 : 1; for (let i = 0; i < wolves; i++) roles.push('loup'); roles.push('voyante'); while (roles.length < n) roles.push('villageois');
       shuffle(roles).forEach((r, i) => { s.pl[s.order[i]].role = r; });
       s.log.push(`🎭 Les rôles sont distribués : ${wolves} loup${wolves > 1 ? 's' : ''}, 1 voyante, ${n - wolves - 1} villageois.`); this.lgNight(s);
     },
@@ -274,7 +277,7 @@ export function installMinigames(House) {
         if (l1 > l0) this.log('info', p.name, `${PETS_E(pet)} ${pet.name} passe niveau ${l1} !`); return; }
       if (m.a === 'fight') {
         const q = this.profiles[m.to]; if (!q || q.id === p.id || !q.pet) return this.toast(a.id, 'Choisis un adversaire qui a un animal'); if (this.limited(p.id, 'petfight', 90e3)) return this.toast(a.id, 'Ton animal reprend son souffle (1 combat toutes les 90 s)');
-        const mk = (o) => { const b = PET_STATS[o.pet.k] || [34, 7, 4], l = petLvl(o.pet.xp); return { n: o.pet.name, e: PETS_E(o.pet), hp: b[0] + l * 6, atk: b[1] + l * 2, def: b[2] + l, l }; };
+        const mk = (o) => { const b = PET_STATS[o.pet.k] || [34, 7, 4], l = petLvl(o.pet.xp), k = SHINY_BONUS[o.pet.sh || ''] || 1; return { n: o.pet.name, e: PETS_E(o.pet), hp: Math.round((b[0] + l * 6) * k), atk: Math.round((b[1] + l * 2) * k), def: b[2] + l, l }; };
         const A = mk(p), B = mk(q); const log = []; let turn = Math.random() < .5 ? 0 : 1; const F = [A, B];
         for (let i = 0; i < 30 && A.hp > 0 && B.hp > 0; i++) { const x = F[turn], y = F[1 - turn]; const crit = Math.random() < .12, miss = Math.random() < .08;
           const dmg = miss ? 0 : Math.max(1, Math.round((x.atk * (0.8 + Math.random() * 0.4) - y.def / 2) * (crit ? 1.8 : 1))); y.hp = Math.max(0, y.hp - dmg);
@@ -307,4 +310,4 @@ export function installMinigames(House) {
     },
   });
 }
-const PETS_E = pet => ({ cat: '🐱', dog: '🐶', bunny: '🐰', fox: '🦊', panda: '🐼', dragon: '🐉' })[pet.k] || '🐾';
+const PETS_E = pet => (({ hamster: '🐹', cat: '🐱', dog: '🐶', turtle: '🐢', bunny: '🐰', fox: '🦊', penguin: '🐧', owl: '🦉', koala: '🐨', panda: '🐼', wolf: '🐺', tiger: '🐯', unicorn: '🦄', trex: '🦖', dragon: '🐉' })[pet.k] || '🐾') + (pet.sh ? '✨' : '');

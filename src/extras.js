@@ -206,10 +206,14 @@ export function installExtras(House) {
       this.save();
     },
     animoji(body) { // remplace les emojis par leur version animée dans le texte d'un message
-      const ae = (this.world.x || {}).ae; if (!ae || !body || typeof body !== 'object') return body;
+      const ae = (this.world.x || {}).ae || {}; if (!body || typeof body !== 'object') return body;
       const swap = (t, max = 1900) => { if (typeof t !== 'string') return t; let o = t; for (const [u, n] of Object.entries(AMAP)) if (ae[n] && o.includes(u)) o = o.split(u).join(`<a:${n}:${ae[n]}>`); return o.length > max ? t : o; };
+      // titres, noms de rubriques, pieds : Discord n'y affiche pas les emojis du bot → la pièce devient le mot « pièces »
+      const plain = t => typeof t !== 'string' || !t.includes('🪙') ? t : t.replace(/^🪙\s*/, '').replace(/\s*🪙/g, ' pièces').replace(/pièces\s+pièces/gi, 'pièces').trim();
       const out = { ...body }; if (out.content) out.content = swap(out.content);
-      if (Array.isArray(out.embeds)) out.embeds = out.embeds.map(e => e && ({ ...e, description: swap(e.description, 4000), fields: Array.isArray(e.fields) ? e.fields.map(f => ({ ...f, value: swap(f.value, 1000) })) : e.fields, footer: e.footer }));
+      if (Array.isArray(out.embeds)) out.embeds = out.embeds.map(e => e && ({ ...e, title: plain(e.title), author: e.author ? { ...e.author, name: plain(e.author.name) } : e.author, description: swap(e.description, 4000),
+        fields: Array.isArray(e.fields) ? e.fields.map(f => ({ ...f, name: plain(f.name), value: swap(f.value, 1000) })) : e.fields, footer: e.footer ? { ...e.footer, text: plain(e.footer.text) } : e.footer }));
+      if (Array.isArray(out.components)) out.components = out.components.map(r => r && Array.isArray(r.components) ? { ...r, components: r.components.map(c => ({ ...c, label: plain(c.label), placeholder: plain(c.placeholder), options: Array.isArray(c.options) ? c.options.map(o => ({ ...o, label: plain(o.label), description: plain(o.description) })) : c.options })) } : r);
       return out;
     },
 

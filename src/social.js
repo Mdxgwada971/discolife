@@ -24,7 +24,16 @@ export const MONTHLY = [
   { k: 'ltd_tree', n: 'Sapin illuminé', e: '🎄', p: 150, fete: 'Noël à la maison', col: '#3bd16f' },
 ];
 for (const m of MONTHLY) FURN[m.k] = { n: m.n, e: m.e, p: m.p, ltd: true };
-export const PETS = { cat: { n: 'Chat', e: '🐱', p: 150 }, dog: { n: 'Chien', e: '🐶', p: 150 }, bunny: { n: 'Lapin', e: '🐰', p: 180 }, fox: { n: 'Renard', e: '🦊', p: 250 }, panda: { n: 'Panda', e: '🐼', p: 300 }, dragon: { n: 'Dragon', e: '🐉', p: 600 } };
+// animalerie : rareté (r) et prix de base (p) ; chaque animal existe en version normale ou shiny (argent, or, arc-en-ciel)
+export const PETS = {
+  hamster: { n: 'Hamster', e: '🐹', p: 100, r: 'Commun' }, cat: { n: 'Chat', e: '🐱', p: 120, r: 'Commun' }, dog: { n: 'Chien', e: '🐶', p: 120, r: 'Commun' }, turtle: { n: 'Tortue', e: '🐢', p: 140, r: 'Commun' }, bunny: { n: 'Lapin', e: '🐰', p: 150, r: 'Commun' },
+  fox: { n: 'Renard', e: '🦊', p: 250, r: 'Rare' }, penguin: { n: 'Pingouin', e: '🐧', p: 260, r: 'Rare' }, owl: { n: 'Hibou', e: '🦉', p: 280, r: 'Rare' }, koala: { n: 'Koala', e: '🐨', p: 300, r: 'Rare' }, panda: { n: 'Panda', e: '🐼', p: 320, r: 'Rare' },
+  wolf: { n: 'Loup', e: '🐺', p: 400, r: 'Épique' }, tiger: { n: 'Tigre', e: '🐯', p: 450, r: 'Épique' }, unicorn: { n: 'Licorne', e: '🦄', p: 500, r: 'Épique' },
+  trex: { n: 'T-Rex', e: '🦖', p: 550, r: 'Légendaire' }, dragon: { n: 'Dragon', e: '🐉', p: 600, r: 'Légendaire' },
+};
+// shiny : multiplicateur de prix (le Dragon arc-en-ciel coûte 1250)
+export const SHINY = { '': { n: 'Normal', m: 1 }, s: { n: '✨ Shiny argent', m: 1.4 }, g: { n: '✨ Shiny or', m: 1.7 }, r: { n: '🌈 Shiny arc-en-ciel', m: 2.085 } };
+export const petPrice = (k, sh) => { const b = PETS[k]; const x = SHINY[sh || ''] || SHINY['']; return b ? Math.round(b.p * x.m / 10) * 10 : 0; };
 // succès en 4 niveaux : bronze, argent, or, diamant
 export const ACH = {
   talk: ['💬', 'Bavard', p => p.stats.msgs || 0, [10, 50, 200, 1000], 'messages'],
@@ -56,7 +65,7 @@ export function installSocial(House) {
     },
     petState(p) {
       if (!p.pet) return null; const hungry = Math.floor((Date.now() - p.pet.fed) / 864e5 * 34); // ~3 jours pour être affamé
-      const food = Math.max(0, 100 - hungry); return { k: p.pet.k, name: p.pet.name, food, sulk: food <= 0, lvl: Math.floor(Math.sqrt((p.pet.xp || 0) / 25)) + 1, w: p.pet.w || 0, l: p.pet.l || 0 };
+      const food = Math.max(0, 100 - hungry); return { k: p.pet.k, sh: p.pet.sh || '', name: p.pet.name, food, sulk: food <= 0, lvl: Math.floor(Math.sqrt((p.pet.xp || 0) / 25)) + 1, w: p.pet.w || 0, l: p.pet.l || 0, box: (p.petBox || []).map(x => ({ k: x.k, sh: x.sh || '', name: x.name, lvl: Math.floor(Math.sqrt((x.xp || 0) / 25)) + 1 })) };
     },
     homeOf(p) { if (!p.home) p.home = { items: [], gifts: [], theme: 0 }; p.home.gifts = p.home.gifts || []; return p.home; },
     pubSocial(p) {
@@ -113,8 +122,17 @@ export function installSocial(House) {
           this.send(ws, { t: 'giftOpened', g: { fromName: g.fromName, coins: g.coins, k: g.k, note: g.note } }); this.pushProf(p); return true;
         }
         case 'petBuy': {
-          const it = PETS[m.k]; if (!it) return true; if (p.coins < it.p) { this.toast(a.id, `Pas assez de 🪙 (il en faut ${it.p})`); return true; }
-          p.coins -= it.p; p.pet = { k: m.k, name: clean(m.name, 16) || it.n, fed: Date.now() }; this.log('info', p.name, `adopte ${it.e} ${p.pet.name} !`); this.pushProf(p); return true;
+          const it = PETS[m.k], sh = SHINY[m.sh || ''] ? (m.sh || '') : ''; if (!it) return true; const price = petPrice(m.k, sh);
+          p.petBox = p.petBox || []; if ((p.pet && p.pet.k === m.k && (p.pet.sh || '') === sh) || p.petBox.some(x => x.k === m.k && (x.sh || '') === sh)) { this.toast(a.id, 'Tu as déjà cet animal dans ta collection'); return true; }
+          if (p.petBox.length >= 15) { this.toast(a.id, 'Ta collection est pleine (16 animaux max)'); return true; }
+          if (p.coins < price) { this.toast(a.id, `Pas assez de 🪙 (il en faut ${price})`); return true; }
+          p.coins -= price; if (p.pet) p.petBox.push(p.pet); p.pet = { k: m.k, sh, name: clean(m.name, 16) || it.n, fed: Date.now(), xp: 0 };
+          this.log('info', p.name, `adopte ${it.e} ${p.pet.name}${sh ? ` (${SHINY[sh].n})` : ''} !`); if (sh === 'r') this.announce(`🌈 **${p.name}** a adopté un ${it.n} **shiny arc-en-ciel** dans Discolife !`);
+          this.toast(a.id, `${it.e} ${p.pet.name} est à toi !`); this.pushProf(p); return true;
+        }
+        case 'petSwap': { // change d'animal actif (collection)
+          p.petBox = p.petBox || []; const i = Math.floor(+m.i); if (!(i >= 0 && i < p.petBox.length)) return true;
+          const nx = p.petBox.splice(i, 1)[0]; if (p.pet) p.petBox.push(p.pet); p.pet = nx; this.pushProf(p); return true;
         }
         case 'petFeed': {
           if (!p.pet) return true; if (p.coins < 5) { this.toast(a.id, 'Il faut 5 🪙 pour nourrir ton animal'); return true; }
