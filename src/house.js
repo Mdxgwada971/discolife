@@ -16,7 +16,7 @@ const CARS = { citadine: ['citadine', 0], berline: ['berline', 0], van: ['van ut
   classique: ['classique des années 60', 350], muscle: ['muscle car', 450], sportive: ['sportive GT', 500], jdm: ['drift JDM', 550], supercar: ['supercar', 1000] };
 for (const [k, [n, p]] of Object.entries(CARS)) if (p) SHOP['car_' + k] = { p, n: n.charAt(0).toUpperCase() + n.slice(1), e: '🚗', kind: 'car' };
 const MODELS = Object.keys(CARS);
-// accélération en course : prix de la voiture + améliorations (max 45 %) ; combo Sportive GT rouge + jantes jaunes = 50 %
+// accélération en course : prix de la voiture + améliorations (max 45 %) ; bonus spécial
 const YELLOW_RIMS = ['#f5c542', '#ffd84a'];
 export const carCombo = (p, model) => model === 'sportive' && p.car && p.car.model === 'sportive' && (p.car.col || '').toLowerCase() === '#d63a3a' && p.owned.includes('rims') && YELLOW_RIMS.includes((p.rimc || '').toLowerCase());
 const carBonus = (p, model) => { if (carCombo(p, model)) return 0.5; const ups = ['spoiler', 'smoke', 'rims', 'neon'].filter(u => p.owned.includes(u) && (p.upOn || {})[u] !== false).length; return Math.min(0.45, CARS[model][1] / 1000 * 0.3 + ups * 0.03); };
