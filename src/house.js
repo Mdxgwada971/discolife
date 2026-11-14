@@ -268,7 +268,7 @@ export class House extends DurableObject {
       setTimeout(() => { this.log('daily', p.name, `bonus du jour : +${bonus} 🪙 (série de ${p.streak} jour${p.streak > 1 ? 's' : ''})`); if (p.streak >= 7) this.badge(p, 'streak7'); }, 300);
       if (!this.world.dayFirst || this.world.dayFirst.day !== today) { this.world.dayFirst = { day: today, id: p.id }; p.coins += 10; setTimeout(() => this.log('daily', p.name, '☀️ premier connecté du jour · +10 🪙'), 400); }
     }
-    this.send(pair[1], { t: 'init', me: p.id, profiles: Object.fromEntries(Object.values(this.profiles).map(x => [x.id, this.pub(x)])), online: this.online(), queue: this.world.queue, np: this.world.np, poll: this.world.poll, feed: this.world.feed.slice(-40), starboard: this.world.starboard, records: this.world.records, teams: this.world.teams, boost: this.boosted() ? this.world.boost : null, season: this.world.season || monthKey(), cv: this.carVotes(), champs: this.world.champs || [], invite: this.world.invites[p.id] || null, shop: SHOP, badges: BADGES, furn: FURN, pets: PETS, shiny: SHINY, achDef: Object.fromEntries(Object.entries(ACH).map(([k, a]) => [k, { e: a[0], n: a[1], th: a[3], u: a[4] }])), fete: this.fete(), games: this.gamesState(), srv: this.srvSnapshot(), now: Date.now() });
+    this.send(pair[1], { t: 'init', me: p.id, profiles: Object.fromEntries(Object.values(this.profiles).map(x => [x.id, this.pub(x)])), online: this.online(), queue: this.world.queue, np: this.world.np, poll: this.world.poll, feed: this.world.feed.slice(-40), starboard: this.world.starboard, records: this.world.records, teams: this.world.teams, boost: this.boosted() ? this.world.boost : null, season: this.world.season || monthKey(), cv: this.carVotes(), champs: this.world.champs || [], invite: this.world.invites[p.id] || null, shop: SHOP, badges: BADGES, furn: FURN, pets: PETS, shiny: SHINY, cvMine: (this.world.cv && this.world.cv.k === weekKey()) ? (this.world.cv.v[p.id] || null) : null, achDef: Object.fromEntries(Object.entries(ACH).map(([k, a]) => [k, { e: a[0], n: a[1], th: a[3], u: a[4] }])), fete: this.fete(), games: this.gamesState(), srv: this.srvSnapshot(), now: Date.now() });
     this.pushProf(p);
     this.bcast({ t: 'pres', online: this.online() });
     if (this._new) { this._new = false; setTimeout(() => this.log('welcome', p.name, `arrive pour la première fois dans Discolife ! Bienvenue 🏠`), 200); }
@@ -426,8 +426,8 @@ export class House extends DurableObject {
       case 'carvote': {
         const o = this.profiles[m.id]; if (!o || !o.car || o.id === a.id || this.limited(a.id, 'cv', 1500)) return;
         const w = this.world; if (!w.cv || w.cv.k !== weekKey()) w.cv = { k: weekKey(), v: {} };
-        if (w.cv.v[a.id] === o.id) delete w.cv.v[a.id]; else { w.cv.v[a.id] = o.id; this.progress(p, 'carvote'); this.toUser(o.id, { t: 'toast', text: `❤️ ${p.name} vote pour ta caisse !` }); }
-        this.pushWorld(); return;
+        if (w.cv.v[a.id] === o.id) { delete w.cv.v[a.id]; this.toUser(a.id, { t: 'toast', text: 'Vote retiré' }); } else { w.cv.v[a.id] = o.id; this.progress(p, 'carvote'); this.toUser(o.id, { t: 'toast', text: `❤️ ${p.name} vote pour ta caisse !` }); this.toUser(a.id, { t: 'toast', text: `❤️ Vote enregistré pour la caisse de ${o.name} (1 vote par semaine, tu peux changer)` }); }
+        this.toUser(a.id, { t: 'cvMine', id: w.cv.v[a.id] || null }); this.save(); this.pushWorld(); return;
       }
       case 'admin': {
         if (!this.isAdmin(p)) return; const w = this.world;
@@ -444,7 +444,7 @@ export class House extends DurableObject {
       case 'plate': { if (!p.owned.includes('plate')) return; p.plate = clean(m.text, 8).toUpperCase(); this.pushProf(p); return; }
       case 'song': {
         const s = clean(m.s, 50); if (!s || this.limited(a.id, 'so', 3000)) return; mark();
-        const w = this.world; const item = { s, by: p.name, id: a.id };
+        const w = this.world; const st = ['lofi', 'house', 'synth', 'chill', 'afro'].includes(m.st) ? m.st : 'lofi'; const item = { s, by: p.name, id: a.id, st, seed: Math.floor(Math.random() * 1e6) };
         if (!w.np) { w.np = { ...item, t0: Date.now() }; } else { w.queue.push(item); w.queue = w.queue.slice(0, 30); }
         p.stats.songs++; if (!this.capped(p, 'song', 15)) this.addXP(p, 5); this.progress(p, 'song'); if (p.stats.songs >= 10) this.badge(p, 'dj');
         this.log('music', p.name, `ajoute « ${s} » à la file`); this.pushWorld(); this.pushProf(p); return;
