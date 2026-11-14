@@ -818,7 +818,7 @@ function toggleAudio(){try{AC();if(audioOn){clearInterval(aTimer);audioOn=false;
 // ---------------------------------------------------------------- panneaux des salons
 const MODELS=Object.fromEntries(Object.entries(CARS).map(([k,v])=>[k,v.n]));
 const ownsCar=(P_,k)=>!CARS[k].p||(P_.owned||[]).includes('car_'+k);
-function carAccel(p,model,col){const pr=(SHOPDEF['car_'+model]||{}).p||0,own=p.owned||[];if(model==='sportive'&&(col||(p.car&&p.car.col)||'').toLowerCase()==='#d63a3a'&&own.includes('rims')&&['#f5c542','#ffd84a'].includes((p.rimc||'').toLowerCase()))return 50;const ups=['spoiler','smoke','rims','neon'].filter(u=>own.includes(u)&&(p.upOn||{})[u]!==false).length;return Math.round(Math.min(.45,pr/1000*.3+ups*.03)*100)}
+function carAccel(p,model,col){const pr=(SHOPDEF['car_'+model]||{}).p||0,own=p.owned||[];const ups=['spoiler','smoke','rims','neon'].filter(u=>own.includes(u)&&(p.upOn||{})[u]!==false).length;return Math.round(Math.min(.45,pr/1000*.3+ups*.03)*100)}
 const COLS=['#ff4fa8','#4fe3ff','#ffd84a','#b6e32c','#d63a3a','#f2f2f7','#1e1e28','#a66bff'];
 const UPS=['neon','spoiler','gold','chrome','rainbow','smoke','plate','tint','hlneon','rims'];
 function carTop(){const v=W.cv||{};let b=null,n=0;for(const[k,c]of Object.entries(v))if(c>n&&PROF[k]&&PROF[k].car){b=k;n=c}return b}
