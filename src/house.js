@@ -16,6 +16,10 @@ const CARS = { citadine: ['citadine', 0], berline: ['berline', 0], van: ['van ut
   classique: ['classique des années 60', 350], muscle: ['muscle car', 450], sportive: ['sportive GT', 500], jdm: ['drift JDM', 550], supercar: ['supercar', 1000] };
 for (const [k, [n, p]] of Object.entries(CARS)) if (p) SHOP['car_' + k] = { p, n: n.charAt(0).toUpperCase() + n.slice(1), e: '🚗', kind: 'car' };
 const MODELS = Object.keys(CARS);
+// accélération en course : prix de la voiture + améliorations (max 45 %) ; combo Sportive GT rouge + jantes jaunes = 50 %
+const YELLOW_RIMS = ['#f5c542', '#ffd84a'];
+export const carCombo = (p, model) => model === 'sportive' && p.car && p.car.model === 'sportive' && (p.car.col || '').toLowerCase() === '#d63a3a' && p.owned.includes('rims') && YELLOW_RIMS.includes((p.rimc || '').toLowerCase());
+const carBonus = (p, model) => { if (carCombo(p, model)) return 0.5; const ups = ['spoiler', 'smoke', 'rims', 'neon'].filter(u => p.owned.includes(u) && (p.upOn || {})[u] !== false).length; return Math.min(0.45, CARS[model][1] / 1000 * 0.3 + ups * 0.03); };
 const MODEL_LABEL = Object.fromEntries(Object.entries(CARS).map(([k, v]) => [k, v[0]]));
 const SPOTS = 6;
 const BADGES = {
@@ -84,7 +88,7 @@ export class House extends DurableObject {
   roomOf(id) { return (this.online()[id] || {}).room; }
 
   pub(p) { // profil visible par tout le monde
-    return { id: p.id, name: p.name, avatar: p.avatar, coins: p.coins, xp: p.xp, lvl: p.lvl, acc: p.acc, car: p.car, upOn: p.upOn, plate: p.plate, owned: p.owned, badges: p.badges, voiceSec: p.voiceSec, stats: p.stats, streak: p.streak, team: p.team, ...this.pubSocial(p), daily: this.dailyOf(p), hl: p.hl || null, rim: p.rim || null, playing: p.playing && Date.now() - p.playing.t < 4 * 3600e3 ? p.playing : null, admin: this.world.admins.includes(p.id), vip: !!this.world.teams[p.id] };
+    return { id: p.id, name: p.name, avatar: p.avatar, coins: p.coins, xp: p.xp, lvl: p.lvl, acc: p.acc, car: p.car, upOn: p.upOn, plate: p.plate, owned: p.owned, badges: p.badges, voiceSec: p.voiceSec, stats: p.stats, streak: p.streak, team: p.team, ...this.pubSocial(p), daily: this.dailyOf(p), hl: p.hl || null, rim: p.rim || null, rimc: p.rimc || null, playing: p.playing && Date.now() - p.playing.t < 4 * 3600e3 ? p.playing : null, admin: this.world.admins.includes(p.id), vip: !!this.world.teams[p.id] };
   }
   pushProf(p, extra) { if (!this._inAch) { this._inAch = true; try { this.checkAch(p); } finally { this._inAch = false; } } this.bcast({ t: 'prof', p: this.pub(p), ...(extra || {}) }); this.save(); }
 
@@ -420,7 +424,8 @@ export class House extends DurableObject {
       case 'up': { if (!p.owned.includes(m.id) || SHOP[m.id]?.kind !== 'up') return; p.upOn[m.id] = !!m.on; if (m.on && m.id === 'chrome') p.upOn.rainbow = false; if (m.on && m.id === 'rainbow') p.upOn.chrome = false; this.pushProf(p); return; }
       case 'tune': {
         if (m.k === 'hl' && p.owned.includes('hlneon') && /^#[0-9a-f]{6}$/i.test(m.v || '')) p.hl = m.v;
-        else if (m.k === 'rim' && p.owned.includes('rims') && ['sport', 'multi', 'deep', 'turbine'].includes(m.v)) p.rim = m.v; else return;
+        else if (m.k === 'rim' && p.owned.includes('rims') && ['sport', 'multi', 'deep', 'turbine'].includes(m.v)) p.rim = m.v;
+        else if (m.k === 'rimc' && p.owned.includes('rims') && /^#[0-9a-f]{6}$/i.test(m.v || '')) p.rimc = m.v; else return;
         this.pushProf(p); return;
       }
       case 'carvote': {
@@ -945,8 +950,7 @@ export class House extends DurableObject {
     }
     if (r.state !== 'lobby' || r.players[p.id]) return;
     const best = p.car ? p.car.model : (MODELS.filter(k => !CARS[k][1] || p.owned.includes('car_' + k)).sort((a, b) => CARS[b][1] - CARS[a][1])[0] || 'citadine');
-    const ups = ['spoiler', 'smoke', 'rims', 'neon'].filter(u => p.owned.includes(u) && (p.upOn || {})[u] !== false).length;
-    const bonus = Math.min(0.45, CARS[best][1] / 1000 * 0.3 + ups * 0.03);
+    const bonus = carBonus(p, best);
     r.players[p.id] = { id: p.id, n: p.name, p: 0, last: 0, car: MODEL_LABEL[best], bonus: Math.round(bonus * 100) };
     if (r.t - Date.now() < 6000 && r.t - r.id < 45000) r.t = Math.min(r.id + 45000, Date.now() + 6000);
     this.bcast({ t: 'race', r: this.raceView() });

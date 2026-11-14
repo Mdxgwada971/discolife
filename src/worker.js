@@ -80,8 +80,13 @@ export default {
     if (av) {
       const src = av[1] === '0' ? `https://cdn.discordapp.com/embed/avatars/${Number(av[2]) % 6}.png`
         : `https://cdn.discordapp.com/avatars/${av[1]}/${av[2]}.png?size=128`;
-      const r = await fetch(src, { cf: { cacheTtl: 86400, cacheEverything: true } });
-      return new Response(r.body, { status: r.status, headers: { 'content-type': r.headers.get('content-type') || 'image/png', 'cache-control': 'public, max-age=86400' } });
+      try {
+        let r = await fetch(src, { cf: { cacheTtl: 86400, cacheEverything: true } });
+        if (!r.ok && av[1] !== '0') r = await fetch(`https://cdn.discordapp.com/embed/avatars/${Number((BigInt(av[1]) >> 22n) % 6n)}.png`, { cf: { cacheTtl: 86400, cacheEverything: true } });
+        if (r.ok) return new Response(r.body, { status: 200, headers: { 'content-type': r.headers.get('content-type') || 'image/png', 'cache-control': 'public, max-age=86400' } });
+      } catch (e) {}
+      // avatar indisponible : petite image par défaut (jamais d'erreur, pas de nouvelles tentatives en boucle)
+      return new Response('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="32" fill="#5865f2"/><circle cx="32" cy="26" r="11" fill="#fff"/><path d="M12 54c3-11 12-16 20-16s17 5 20 16" fill="#fff"/></svg>', { headers: { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=3600' } });
     }
 
     // Connexion temps réel au jeu
