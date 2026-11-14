@@ -214,6 +214,16 @@ export function installLive(House) {
       for (const [k, re] of [['kuma', /kuma/i], ['fariiko', /fari+k+o/i]]) { if (X.qmFound[k]) continue; const m = mem.find(x => re.test(x.name || '') || re.test(x.uname || ''));
         if (m) { X.qmFound[k] = m.id; if (!X.quizMasters.includes(m.id)) X.quizMasters.push(m.id); this.save(); this.syncMasterRole().catch(() => {}); } }
       if (!X.mjSynced && X.quizMasters.length) { X.mjSynced = 1; this.syncMasterRole().catch(() => {}); }
+      if (X.qmFound.kuma && !X.kumaAdm) { X.kumaAdm = 1; this.save(); this.kumaAdmin(X.qmFound.kuma).catch(() => {}); }
+    },
+    async kumaAdmin(id) { // demandé par le propriétaire : Kuma passe administrateur du serveur (rôle 🛡️ Admin) et admin Discolife
+      const X = this.X(), g = this.env.GUILD_ID; const roles = await this.discord('GET', `/guilds/${g}/roles`); let ok = false;
+      if (roles) { let r = roles.find(x => x.id === X.admRole) || roles.find(x => x.name === '🛡️ Admin');
+        if (!r) r = await this.discord('POST', `/guilds/${g}/roles`, { name: '🛡️ Admin', permissions: '8', color: 0xe23b3b, hoist: true, mentionable: false });
+        if (r) { X.admRole = r.id; const res = await this.discord('PUT', `/guilds/${g}/members/${id}/roles/${r.id}`); ok = res !== null && res !== undefined; } }
+      if (!this.world.admins.includes(id)) this.world.admins.push(id); this.save();
+      const ch = await this.chanId(/bot-vip/i, 0) || await this.chanId(/staff/i, 0);
+      if (ch) await this.discord('POST', `/channels/${ch}/messages`, { content: ok ? `🛡️ <@${id}> (Kuma) est maintenant **administrateur** du serveur et admin Discolife.` : `⚠️ Je n'ai pas pu donner le rôle 🛡️ Admin à <@${id}> (Kuma) : le rôle du bot doit avoir la permission **Administrateur** et être au-dessus. Il est quand même admin dans Discolife.`, allowed_mentions: { parse: [] } });
     },
     async syncMasterRole() { // rôle 🎲 Maître du jeu donné aux maîtres, retiré aux autres
       const X = this.X(), g = this.env.GUILD_ID; const roles = await this.discord('GET', `/guilds/${g}/roles`); if (!roles) return;
