@@ -6,6 +6,7 @@ const ROOM_NAME = { garage: 'garage', gaming: 'salle-gaming', chill: 'salon-chil
 export const SHOP = {
   glasses: { p: 40, n: 'Lunettes noires', e: '🕶️', kind: 'acc' }, cap: { p: 50, n: 'Casquette néon', e: '🧢', kind: 'acc' },
   phones: { p: 70, n: 'Casque DJ', e: '🎧', kind: 'acc' }, crown: { p: 150, n: 'Couronne', e: '👑', kind: 'acc' },
+  x_stripes: { p: 90, n: "Bandes de course", e: '🏁', kind: 'up' }, x_scoop: { p: 110, n: "Prise d'air capot", e: '🌀', kind: 'up' }, x_skirt: { p: 100, n: "Bas de caisse sport", e: '➖', kind: 'up' }, x_flares: { p: 130, n: "Ailes élargies", e: '🦾', kind: 'up' }, x_splitter: { p: 90, n: "Lame avant", e: '🔻', kind: 'up' }, x_chromeline: { p: 80, n: "Liseré chrome", e: '✨', kind: 'up' }, x_intake: { p: 100, n: "Entrées d'air", e: '🫁', kind: 'up' },
   neon: { p: 60, n: 'Néons de caisse', e: '✨', kind: 'up' }, spoiler: { p: 80, n: 'Aileron', e: '🏎️', kind: 'up' },
   gold: { p: 60, n: 'Jantes dorées', e: '🟡', kind: 'up' }, chrome: { p: 120, n: 'Peinture chrome', e: '🪞', kind: 'up' },
   rainbow: { p: 200, n: 'Peinture arc-en-ciel', e: '🌈', kind: 'up' }, smoke: { p: 50, n: 'Échappement fumée', e: '💨', kind: 'up' },
@@ -222,7 +223,7 @@ export class House extends DurableObject {
     const known = new Set(w.known), fresh = mem.filter(x => !x.user.bot && !known.has(x.user.id)); w.known = ids;
     const ch = this.env.ANNOUNCE_CHANNEL_ID;
     for (const x of fresh.slice(0, 5)) { const u = x.user, nm = x.nick || u.global_name || u.username;
-      await this.discord('POST', `/channels/${ch}/messages`, { content: `<@${u.id}>`, allowed_mentions: { users: [u.id] }, embeds: [{ color: 0x3bd16f, title: `🏠 Bienvenue dans la maison, ${nm} !`,
+      await this.discord('POST', `/channels/${ch}/messages`, { content: `👋 Bienvenue **${nm}** ! <@${u.id}>`, allowed_mentions: { users: [u.id] }, embeds: [{ color: 0x3bd16f, title: `🏠 Bienvenue dans la maison, ${nm} !`,
         description: `Un nouveau voisin débarque 🎉\nTa place t'attend dans **Discolife** : gare ta caisse, commande à Lola, défie les autres à l'arcade et gagne tes premières 🪙.`,
         thumbnail: { url: u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=256` : 'https://cdn.discordapp.com/embed/avatars/0.png' } }],
         components: [{ type: 1, components: [{ type: 2, style: 5, label: 'Entrer dans Discolife', emoji: { name: '🏠' }, url: this.env.SITE_URL || 'https://discolife.warren-molongo.workers.dev' }] }] });
@@ -632,7 +633,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v34'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
+  async setupCheck() { const V = 'v35'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); for (const k of ['race', 'click']) await this.syncRecordRole(k).catch(e => console.log('record role', e)); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
@@ -645,7 +646,7 @@ export class House extends DurableObject {
     return (await this.voiceMap())[ch] || null;
   }
   async postRelaunch(uid, ch) { // bouton « Relancer Discolife » dans le tchat du salon vocal d'arrivée
-    const msg = await this.discord('POST', `/channels/${ch}/messages`, { content: `<@${uid}> 🏠 Tu as changé de salon : relance Discolife ici en un clic`, allowed_mentions: { users: [uid] },
+    const msg = await this.discord('POST', `/channels/${ch}/messages`, { content: `🏠 **${((this.srv().mem || {})[uid] || this.profiles[uid] || {}).name || 'Toi'}**, tu as changé de salon : relance Discolife ici en un clic <@${uid}>`, allowed_mentions: { users: [uid] },
       components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Relancer Discolife', emoji: { name: '▶️' }, custom_id: `launch:${uid}` }] }] });
     if (msg) { const w = this.world; w.launchMsgs = (w.launchMsgs || []).concat([{ ch, id: msg.id, t: Date.now() }]).slice(-20); this.save(); }
   }
@@ -1020,8 +1021,19 @@ export class House extends DurableObject {
     this.bcast({ t: 'click', c: this.clickView() }); this.mgB('podium');
   }
   // nouveau record du serveur : enregistré, annoncé, +30 pièces
+  // rôle honorifique du détenteur du record (ne donne rien de plus) : passe au nouveau champion quand le record tombe
+  async syncRecordRole(kind) {
+    const def = { race: { n: '🏎️ Pilote', c: 0xff4fa8 }, click: { n: '⚡ Réflexe éclair', c: 0xffd84a } }[kind]; const rec = this.world.records[kind]; if (!def || !rec || !this.env.GUILD_ID) return;
+    const g = this.env.GUILD_ID, R = this.world.recRoles = this.world.recRoles || {}; const roles = await this.discord('GET', `/guilds/${g}/roles`); if (!roles) return;
+    let r = roles.find(x => x.id === (R[kind] || {}).id) || roles.find(x => x.name === def.n);
+    if (!r) r = await this.discord('POST', `/guilds/${g}/roles`, { name: def.n, color: def.c, hoist: false, mentionable: false }); if (!r) return;
+    const prev = (R[kind] || {}).holder; R[kind] = { id: r.id, holder: rec.id }; this.save();
+    if (prev && prev !== rec.id) await this.discord('DELETE', `/guilds/${g}/members/${prev}/roles/${r.id}`);
+    await this.discord('PUT', `/guilds/${g}/members/${rec.id}/roles/${r.id}`);
+  }
   newRecord(kind, p, v, txt) {
     const old = this.world.records[kind]; this.world.records[kind] = { ms: v, n: p.name, id: p.id, at: Date.now() }; p.coins += 30; this.pushProf(p); this.pushWorld();
+    this.syncRecordRole(kind).catch(e => console.log('record role', e));
     this.log(kind === 'click' ? 'click' : 'race', p.name, `🏆 NOUVEAU RECORD DU SERVEUR : ${txt} ! +30 🪙`, kind === 'click' ? 'arcade' : 'garage');
     this.announce(`🏆 **Nouveau record du serveur** : **${p.name}** fait ${txt}${old ? ` (ancien record : ${old.ms} ms par ${old.n})` : ''} ! À vous de le battre dans Discolife 🔥`);
   }

@@ -122,7 +122,7 @@ export function installGateway(House) {
     async gwWelcome(mb) {
       const u = mb.user; if (!u || u.bot) return; const w = this.world; w.known = w.known || []; if (w.known.includes(u.id)) return; w.known.push(u.id); w.memT = Date.now();
       const nm = mb.nick || u.global_name || u.username;
-      await this.discord('POST', `/channels/${this.env.ANNOUNCE_CHANNEL_ID}/messages`, { content: `<@${u.id}>`, allowed_mentions: { users: [u.id] }, embeds: [{ color: 0x3bd16f, title: `🏠 Bienvenue dans la maison, ${nm} !`,
+      await this.discord('POST', `/channels/${this.env.ANNOUNCE_CHANNEL_ID}/messages`, { content: `👋 Bienvenue **${nm}** ! <@${u.id}>`, allowed_mentions: { users: [u.id] }, embeds: [{ color: 0x3bd16f, title: `🏠 Bienvenue dans la maison, ${nm} !`,
         description: `Un nouveau voisin débarque 🎉\nTa place t'attend dans **Discolife** : gare ta caisse, commande à Lola, défie les autres à l'arcade et gagne tes premières 🪙.`,
         thumbnail: { url: u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png?size=256` : 'https://cdn.discordapp.com/embed/avatars/0.png' } }],
         components: [{ type: 1, components: [{ type: 2, style: 5, label: 'Entrer dans Discolife', emoji: { name: '🏠' }, url: 'https://discolife.warren-molongo.workers.dev' }] }] });

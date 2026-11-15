@@ -409,7 +409,7 @@ const CAR_MODELS=CARS; // compat
 const CARLABELS=[];
 function wheel2(cx,yy,cz,r,hub,ww,st){const ring=(rr,dy)=>{const a=[];for(let i=0;i<22;i++){const t=2*Math.PI*i/22;a.push([cx+rr*Math.cos(t),yy+(dy||0),cz+rr*Math.sin(t)])}return a};
   poly(ring(r,-.16),'#07060c');poly(ring(r),'#14121c');poly(ring(r*.9),'#201d2a');if(ww)poly(ring(r*.84),'#e9e6ef');
-  const rim=hub||'#b9bdcb';poly(ring(r*.66,.005),rim);poly(ring(r*.5,.008),shade(rim,.55));
+  const rim=hub||'#b9bdcb',rk=st?.78:.66;poly(ring(r*rk,.005),rim);poly(ring(r*rk*.76,.008),shade(rim,.55));if(st)line(ring(r*rk,.006).slice(13,19),shade(rim,1.5),2);
   const ns=st==='multi'?10:st==='turbine'?14:st==='deep'?4:5,lw=st==='multi'?2:st==='turbine'?2.5:st==='deep'?6:4,r0=st==='deep'?.3:.14;
   if(st==='deep')poly(ring(r*.6,.009),shade(rim,.35));
   for(let k=0;k<ns;k++){const a=k*2*Math.PI/ns+.3,a2=st==='turbine'?a+.5:a;line([[cx+r*r0*Math.cos(a),yy+.01,cz+r*r0*Math.sin(a)],[cx+r*.62*Math.cos(a2),yy+.01,cz+r*.62*Math.sin(a2)]],st==='sport'?shade(rim,.6):rim,lw)}
@@ -423,7 +423,7 @@ function extrude(pr,x,L,y0,y1,col,glassy){const Q=(p,yy)=>[x+p[0]*L,yy,p[1]];
     else poly(pts,shade(col,.62+.5*Math.max(0,br)))}
   poly(pr.map(p=>Q(p,y1)),shade(col,.76))}
 function drawCar(c,t){
-  const m=CARS[c.model]||CARS.berline,s=c.x!=null?c:SPOTS_G[c.spot];const x=s.x,y=s.y,L=m.L,W=m.W,r=m.r,fx=m.fx||[],has=k=>fx.includes(k);
+  const m=CARS[c.model]||CARS.berline,s=c.x!=null?c:SPOTS_G[c.spot];const x=s.x,y=s.y,L=m.L,W=m.W,r=m.r,fx=m.fx||[],has=k=>fx.includes(k)||!!(c.up&&c.up['x_'+k]);
   const u=c.up||{};let col=c.col;
   if(u.rainbow)col=hsl2hex((t*70+(c.spot||0)*90)%360,85,58);else if(u.chrome)col=mixHex('#d8dce8','#8a93a8',.5+.5*Math.sin(t*1.6));
   const hub=u.gold?'#ffc93c':(has('whitewall')?'#d9dbe4':null);
@@ -491,8 +491,8 @@ function drawCar(c,t){
 }
 // aperçu d'un modèle pour la concession
 const CARPREV={};
-function carPreview(model,col){const key=model+col;if(CARPREV[key])return CARPREV[key];const m=CARS[model];const big=document.createElement('canvas');big.width=big.height=1000;const save=ctx;ctx=big.getContext('2d');
-  drawCar({x:3,y:3,model,col,preview:true,up:{}},0);ctx=save;const c=P(3+m.L/2,3+m.W/2,.7);const out=document.createElement('canvas');out.width=300;out.height=170;out.getContext('2d').drawImage(big,c[0]-170,c[1]-100,340,193,0,0,300,170);CARPREV[key]=out.toDataURL();return CARPREV[key]}
+function carPreview(model,col,pp){const key=model+col+(pp?JSON.stringify([pp.upOn,pp.rim,pp.rimc,pp.hl,pp.owned&&pp.owned.length]):'');if(CARPREV[key])return CARPREV[key];const m=CARS[model];const big=document.createElement('canvas');big.width=big.height=1000;const save=ctx;ctx=big.getContext('2d');
+  drawCar({x:3,y:3,model,col,preview:true,up:pp?Object.fromEntries(Object.entries(pp.upOn||{}).filter(([k,v])=>v&&(pp.owned||[]).includes(k))):{},rim:pp&&pp.rim,rimc:pp&&pp.rimc,hl:pp&&pp.hl},0);ctx=save;const c=P(3+m.L/2,3+m.W/2,.7);const out=document.createElement('canvas');out.width=600;out.height=340;out.getContext("2d").drawImage(big,c[0]-170,c[1]-100,340,193,0,0,600,340);CARPREV[key]=out.toDataURL();return CARPREV[key]}
 // ================================================================ Discolife — client multijoueur
 const CLIENT_ID='1570115480784601128';
 const SHARE_URL=location.origin+'/';
@@ -812,6 +812,12 @@ function radioTick(){if(!audioOn)return;let a;try{a=AC()}catch(e){return}const t
   const nowMs=Date.now()+clockSkew,el=tr.t0?(nowMs-tr.t0)/1000:a.currentTime;if(tr.t0&&el>62)return;
   let i=Math.max(radioNext,Math.ceil(el/sd));const ahead=.25;
   while(i*sd<el+ahead){const t=a.currentTime+(i*sd-el);if(t>=a.currentTime-.01)radioStep(a,S,tr.seed,i,Math.max(t,a.currentTime),sd);i++}radioNext=i}
+// redessin « doux » du panneau : regroupé, et jamais pendant qu'on tape ou qu'on vient de toucher un bouton (sinon le clic se perd)
+let _spT=null,_panelTouch=0;
+function softPanel(){if(_spT)return;_spT=setTimeout(function go(){const p=$('#panel'),a=document.activeElement;
+  if((a&&p&&p.contains(a)&&/INPUT|SELECT|TEXTAREA/.test(a.tagName))||Date.now()-_panelTouch<450){_spT=setTimeout(go,500);return}
+  _spT=null;const st=p?p.scrollTop:0,ws=window.scrollY;try{renderPanel()}catch(e){}if(p)p.scrollTop=st;window.scrollTo(0,ws)},250)}
+document.addEventListener('pointerdown',e=>{const p=$('#panel');if(p&&p.contains(e.target))_panelTouch=Date.now()},true);
 function renderPanelSoft(){try{if(cur==='studio')renderPanel()}catch(e){}}
 function toggleAudio(){try{AC();if(audioOn){clearInterval(aTimer);audioOn=false;return}audioOn=true;radioKey=null;radioNext=0;radioTick();aTimer=setInterval(radioTick,90)}catch(e){toast('Son indisponible ici')}}
 
@@ -820,13 +826,13 @@ const MODELS=Object.fromEntries(Object.entries(CARS).map(([k,v])=>[k,v.n]));
 const ownsCar=(P_,k)=>!CARS[k].p||(P_.owned||[]).includes('car_'+k);
 function carAccel(p,model,col){const pr=(SHOPDEF['car_'+model]||{}).p||0,own=p.owned||[];const ups=['spoiler','smoke','rims','neon'].filter(u=>own.includes(u)&&(p.upOn||{})[u]!==false).length;return Math.round(Math.min(.45,pr/1000*.3+ups*.03)*100)}
 const COLS=['#ff4fa8','#4fe3ff','#ffd84a','#b6e32c','#d63a3a','#f2f2f7','#1e1e28','#a66bff'];
-const UPS=['neon','spoiler','gold','chrome','rainbow','smoke','plate','tint','hlneon','rims'];
+const UPS=['neon','spoiler','gold','chrome','rainbow','smoke','plate','tint','hlneon','rims','x_stripes','x_scoop','x_skirt','x_flares','x_splitter','x_chromeline','x_intake'];
 function carTop(){const v=W.cv||{};let b=null,n=0;for(const[k,c]of Object.entries(v))if(c>n&&PROF[k]&&PROF[k].car){b=k;n=c}return b}
 let carSel={model:'berline',col:'#ff4fa8'};
 function renderPanel(){const p=$('#panel'),k=cur,P_=me();
   if(k==='garage'){const parked=Object.values(PROF).filter(x=>x.car).length;if(!ownsCar(P_,carSel.model))carSel.model='berline';const sel=CARS[carSel.model];
     p.innerHTML=`<div class="card"><h3>🏪 Concession <span class="r mut">tu as ${P_.coins} 🪙</span></h3><div class="cars">${Object.entries(CARS).map(([k,v])=>{const own=ownsCar(P_,k);return `<div class="carc ${k===carSel.model?'on':''} ${own?'':'lock'}" data-car="${k}"><img src="${carPreview(k,carSel.col)}" alt=""><b>${v.n}</b><span class="mut">${v.cat} · ⚡ +${Math.round(Math.min(.45,(v.p||0)/1000*.3)*100)} %</span>${own?(P_.car&&P_.car.model===k?'<em class="grn">au garage</em>':'<em>✓ à toi</em>'):`<button class="btn gold" data-buycar="${k}">${v.p} 🪙</button>`}</div>`}).join('')}</div></div>
-    <div class="card"><h3>🚗 Gare ta caisse <span class="r mut">${parked}/6 places</span></h3><div class="mut" style="margin-bottom:6px">${sel.n} · ${sel.cat} · <b style="color:#ffd84a">⚡ +${carAccel(P_,carSel.model,carSel.col)} % d'accélération</b></div>
+    <div class="card"><h3>🚗 Gare ta caisse <span class="r mut">${parked}/6 places</span></h3><img class="bigprev" src="${carPreview(carSel.model,carSel.col,P_)}" alt="Aperçu de ta caisse avec tes modifs" style="width:100%;max-width:420px;display:block;margin:0 auto 6px;image-rendering:auto"><div class="mut" style="margin-bottom:6px">${sel.n} · ${sel.cat} · <b style="color:#ffd84a">⚡ +${carAccel(P_,carSel.model,carSel.col)} % d'accélération</b></div>
     <div class="row" style="margin-bottom:10px">${COLS.map(c=>`<span class="sw ${c===carSel.col?'on':''}" data-c="${c}" style="background:${c}"></span>`).join('')}</div>
     <div class="row"><button class="btn pri" id="park">${P_.car?'🔁 Changer ma caisse':'🅿️ Garer ma caisse'}</button>${P_.car?'<button class="btn" id="unpark">Sortir ma caisse</button>':''}</div></div>
     <div class="card"><h3>🔧 Atelier</h3><div class="atel">${UPS.map(u=>{const it=SHOPDEF[u]||{};const own=(P_.owned||[]).includes(u),on=(P_.upOn||{})[u];return `<div class="item"><span class="e">${it.e||''}</span><div><b>${esc(it.n||u)}</b></div>${own?`<button class="btn ${on?'grn':''}" data-up="${u}">${on?'ON':'OFF'}</button>`:`<button class="btn gold" data-buy="${u}">${it.p} 🪙</button>`}</div>`}).join('')}</div>
@@ -993,9 +999,9 @@ function onMsg(m){const t=now();
   switch(m.t){
     case 'init':ME=m.me;W.cvMine=m.cvMine||null;PROF=m.profiles;ONLINE=m.online;if(m.srv){SRV=m.srv;ensureVRooms()}Object.assign(W,{boost:m.boost,season:m.season,cv:m.cv||{},champs:m.champs||[]});setTimeout(()=>{updBoost();updDaily()},50);Object.assign(W,{queue:m.queue,np:m.np,poll:m.poll,starboard:m.starboard,records:m.records,teams:m.teams||{}});SHOPDEF=m.shop;BADGEDEF=m.badges;FURNDEF=m.furn||{};PETDEF=m.pets;SHINYDEF=m.shiny||SHINYDEF||{};ACHDEF=m.achDef||{};FETE=m.fete||null;setTimeout(updFete,60);clockSkew=m.now-Date.now();games=m.games||games;setTimeout(()=>send({t:'mg',g:'sync'}),300);
       feedEl.innerHTML='';(m.feed||[]).forEach(f=>addFeed(f,true));$('#gate').style.display='none';cur=myRoom();renderTabs();renderPanel();renderLB();if(m.invite)showInvite(m.invite);if(inDiscord&&sdk&&sdk.channelId)send({t:'vc',id:sdk.channelId});if(!inDiscord&&vsync)setTimeout(()=>send({t:'vpoll'}),800);if(cur==='afk')ssStart('chill');else intro={k:cur,t0:now(),seed:1};break;
-    case 'pres':{const before=myRoom();ONLINE=m.online;if(!visibleIn(ME,'team')&&cur==='team'&&!myTeam())switchView('garage');renderTabs();renderLB();if(cur==='arcade'||cur==='garage')renderPanel();break}
+    case 'pres':{const before=myRoom();ONLINE=m.online;if(!visibleIn(ME,'team')&&cur==='team'&&!myTeam())switchView('garage');renderTabs();renderLB();if(cur==='arcade'||cur==='garage')softPanel();break}
     case 'prof':{const old=PROF[m.p.id];PROF[m.p.id]=m.p;if(m.drop)dropT[m.drop]=t;if(cur.startsWith('home:')&&m.p.id===cur.slice(5)){ensureHome(m.p.id);if(old&&old.home&&m.p.home&&old.home.theme!==m.p.home.theme){delete STATIC['home:'+m.p.id]}renderPanel()}if(m.p.id===ME){updHeader();updDaily();if(modalKind==='shop')shop();if(!myTeam()&&cur==='team')switchView('garage')}
-      if(!old||old.name!==m.p.name||old.team!==m.p.team)renderTabs();if(['garage','arcade','team'].includes(cur))renderPanel();renderLB();break}
+      if(!old||old.name!==m.p.name||old.team!==m.p.team)renderTabs();if(['garage','arcade','team'].includes(cur)&&(m.p.id===ME||!old||cur!=='garage'||JSON.stringify([old.car,old.rim,old.rimc,old.upOn,old.plate])!==JSON.stringify([m.p.car,m.p.rim,m.p.rimc,m.p.upOn,m.p.plate])))softPanel();renderLB();break}
     case 'feed':addFeed(m.f);break;
     case 'cvMine':W.cvMine=m.id;if(cur==='garage')renderPanel();break;
     case 'world':Object.assign(W,{boost:m.boost,season:m.season,cv:m.cv||{},champs:m.champs||[]});updBoost();Object.assign(W,{queue:m.queue,np:m.np,poll:m.poll,starboard:m.starboard,records:m.records,teams:m.teams||W.teams});renderLB();renderTabs();if(['chill','studio','team'].includes(cur))renderPanel();else if(cur==='garage'){const k=JSON.stringify(W.cv||{});if(k!==W._cvk){W._cvk=k;renderPanel()}}break;
@@ -1316,6 +1322,7 @@ function drawCasinoRes(){const m=casinoLast;if(!m)return;$('#cCoins').textConten
   if(m.k==='roulette')R.innerHTML=`<div class="mgbig">🎡 ${m.n} ${m.n===0?'🟢':m.red?'🔴':'⚫'}</div>${res(m.win)}`;
   if(m.k==='bj'){const cs=v=>({1:'A',11:'V',12:'D',13:'R'})[v]||v;R.innerHTML=`<div class="mut">Croupier ${m.dlV!=null?'('+m.dlV+')':''}</div><div class="cards">${m.dl.map(c=>`<b>${cs(c)}</b>`).join('')}${m.done?'':'<b class="hid">?</b>'}</div><div class="mut">Toi (${m.meV})</div><div class="cards">${m.me.map(c=>`<b>${cs(c)}</b>`).join('')}</div>${m.done?`<div class="mgbig">${esc(m.msg||'')}</div>${m.win>0?`<div class="mut" style="text-align:center">+${m.win} 🪙</div>`:''}`:''}`}}
 // ---------------------------------------------------------------- 🐺 loup-garou
+document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('#lgCard')){window.lgShow=!window.lgShow;drawLG()}});
 let lgSeen=null;const LGR={loup:'🐺 Loup-garou',voyante:'🔮 Voyante',villageois:'🧑‍🌾 Villageois'};
 function openLG(){openM(`<h2>🐺 Loup-garou${isSoir('lg')?' · pièces ×2':''}</h2><div id="lgS"></div>`,'lg');drawLG()}
 function drawLG(){if(modalKind!=='lg')return;const s=MG.lg;const el=$('#lgS');if(!s){el.innerHTML=`<div class="mut">Aucune table pour l'instant.</div><button class="btn pri" id="lgJ">Ouvrir une table</button>`;$('#lgJ').onclick=()=>send({t:'mg',g:'lg',a:'join'});return}
@@ -1325,7 +1332,7 @@ function drawLG(){if(modalKind!=='lg')return;const s=MG.lg;const el=$('#lgS');if
   else if(ph==='day'){head=`<div class="mgbig">☀️ Jour ${s.day} · débat ${mgLeft(s.t)} s</div>${mgBar(s.t,60000)}`;act='<span class="mut">Discutez dans le tchat du salon chill. Le vote arrive.</span>'}
   else if(ph==='vote'){head=`<div class="mgbig">🗳️ Vote · ${mgLeft(s.t)} s</div>${mgBar(s.t,40000)}`;act=alive?'<b>Vote pour éliminer quelqu\'un 👇</b>':'<span class="mut">💀 Tu ne votes plus.</span>'}
   else{head=`<div class="mgbig">${s.winner==='village'?'🎉 Victoire du village':'🐺 Victoire des loups'}</div>`;act='<button class="btn pri" id="lgJ">Nouvelle partie</button>'}
-  const myRole=me_&&me_.role?`<div class="mgsoir">Ton rôle : <b>${LGR[me_.role]}</b>${me_.role==='loup'?' · élimine les villageois sans te faire repérer':me_.role==='voyante'?' · chaque nuit, découvre le rôle d\'un joueur':' · trouve et élimine les loups'}</div>`:'';
+  const myRole=me_&&me_.role?`<div class="mgsoir" id="lgCard" style="cursor:pointer">🂠 Ta carte (secrète) : <span style="${window.lgShow?'':'filter:blur(9px);'}transition:filter .2s"><b>${LGR[me_.role]}</b>${me_.role==='loup'?' · élimine les villageois sans te faire repérer':me_.role==='voyante'?' · chaque nuit, découvre le rôle d\'un joueur':' · trouve et élimine les loups'}</span> <span class="mut">(${window.lgShow?'touche pour cacher':'touche pour voir'})</span></div>`:'';
   const canClick=id=>{const x=s.players.find(y=>y.id===id);if(!x||!x.alive||!alive)return false;if(ph==='night'&&me_.role==='loup')return x.role!=='loup';if(ph==='night'&&me_.role==='voyante')return id!==ME&&!(me_.seen||{})[id];if(ph==='vote')return true;return false};
   const vc={};for(const v of Object.values(s.votes||{}))vc[v]=(vc[v]||0)+1;
   const pl=`<div class="lgp">${s.players.map(x=>{const seen=me_&&(me_.seen||{})[x.id];const r=x.role||seen;return `<button class="btn ${x.alive?'':'dead'}" data-lg="${x.id}" ${canClick(x.id)?'':'disabled'}>${x.alive?'':'💀 '}${esc(x.n)}${x.id===ME?' (toi)':''}${r?`<br><small>${LGR[r]}</small>`:''}${vc[x.id]?` <small>· ${vc[x.id]} 🗳️</small>`:''}</button>`}).join('')}</div>`;

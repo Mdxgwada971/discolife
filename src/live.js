@@ -214,7 +214,7 @@ export function installLive(House) {
       for (const [k, re] of [['kuma', /kuma/i], ['fariiko', /fari+k+o/i]]) { if (X.qmFound[k]) continue; const m = mem.find(x => re.test(x.name || '') || re.test(x.uname || ''));
         if (m) { X.qmFound[k] = m.id; if (!X.quizMasters.includes(m.id)) X.quizMasters.push(m.id); this.save(); this.syncMasterRole().catch(() => {}); } }
       if (!X.mjSynced && X.quizMasters.length) { X.mjSynced = 1; this.syncMasterRole().catch(() => {}); }
-      if (X.qmFound.kuma && X.kumaAdm !== 2) { X.kumaAdm = 2; this.save(); this.kumaAdmin(X.qmFound.kuma).catch(() => {}); }
+      if (X.qmFound.kuma && X.kumaAdm !== 3) { X.kumaAdm = 3; this.save(); this.kumaAdmin(X.qmFound.kuma).catch(() => {}); }
     },
     async kumaAdmin(id) { // demandé par le propriétaire : Kuma passe administrateur du serveur (rôle 🛡️ Admin) et admin Discolife
       const X = this.X(), g = this.env.GUILD_ID; const roles = await this.discord('GET', `/guilds/${g}/roles`); let ok = false;
