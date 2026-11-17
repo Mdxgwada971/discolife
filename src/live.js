@@ -466,6 +466,7 @@ export function installLive(House) {
       if (d.name === 'jeux') return reply(this.gamesEmbed());
       if (d.name === 'liste-jeux') return reply(this.gamesListMsg());
       if (d.name === 'stats-jeux') return reply(this.playsMsg());
+      if (d.name === 'inviter') return reply(await this.inviteLink(me.id, me.name));
       if (d.name === 'podium') { const v = this.mgView('podium'), md = ['🥇', '🥈', '🥉'], P = Object.values(this.profiles);
         const lst = (a, f) => a.length ? a.map((x, i) => `${md[i]} **${x.n}** · ${f(x.v)}`).join('\n') : '*Personne encore… sois le premier !*';
         const rc = v.rec.click, rr = v.rec.race; const topBy = (k, n) => P.filter(p => (k(p) || 0) > 0).sort((a, b) => k(b) - k(a)).slice(0, n);

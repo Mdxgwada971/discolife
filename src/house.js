@@ -593,6 +593,7 @@ export class House extends DurableObject {
       { name: 'classement', description: 'Classement des équipes et des joueurs Discolife', dm_permission: false },
       { name: 'lancer', description: 'Lance un jeu sur le serveur (boss et maîtres du jeu)', dm_permission: false, options: [{ type: 3, name: 'jeu', description: 'Le jeu à lancer', required: true, choices: [{ name: '⚡ Quiz express', value: 'quiz' }, { name: '🎁 Coffre surprise', value: 'coffre' }, { name: '💬 Question du jour', value: 'question' }] }] },
       { name: 'podium', description: 'Le podium du serveur et les records à battre', dm_permission: false },
+      { name: 'inviter', description: '🔗 Ton lien d\'invitation perso : +100 pièces par nouveau membre (seuls ces liens comptent)', dm_permission: false },
       { name: 'stats-jeux', description: '📊 Combien de parties par jeu (cette semaine et au total)', default_member_permissions: '8', dm_permission: false },
       { name: 'liste-jeux', description: 'Tous les jeux du serveur et de Discolife, avec leur commande', dm_permission: false },
       { name: 'boutique', description: 'Dépense tes pièces : couleur de pseudo, rôle Mécène…', dm_permission: false },
@@ -636,7 +637,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v39'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); this.announceUpdate().catch(e => console.log('annonce maj', e)); for (const k of ['race', 'click']) await this.syncRecordRole(k).catch(e => console.log('record role', e)); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
+  async setupCheck() { const V = 'v40'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); this.announceUpdate().catch(e => console.log('annonce maj', e)); for (const k of ['race', 'click']) await this.syncRecordRole(k).catch(e => console.log('record role', e)); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
@@ -1058,10 +1059,43 @@ export class House extends DurableObject {
       if (ch) await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: 0xffd84a, title: '🎁 Coffre vocal ouvert !', description: won.map(([p, k, g]) => `**${p.name}** a passé **${k * 2} h** en vocal → coffre n°${k} : **+${g} 🪙** (prochain : ${this.vocChest(k + 1)} 🪙)`).join('\n') + '\n\nPlus tu restes en vocal, plus les coffres grossissent (toutes les 2 h) 🎙️' }] }); }
     this.save();
   }
+  // 🔗 invitations : seuls les liens perso créés avec /inviter comptent (+100 pièces par nouveau membre, rôle 🔗 Recruteur au meilleur)
+  inv() { const w = this.world; w.inv = w.inv || { codes: {}, links: {}, count: {}, seen: {}, seeded: 0 }; return w.inv; }
+  invSeed() { const I = this.inv(); if (I.seeded) return; for (const id of Object.keys(this.srv().mem || {})) I.seen[id] = 1; I.seeded = Object.keys(I.seen).length ? 1 : 0; }
+  async inviteLink(uid, name) {
+    const I = this.inv(); this.invSeed(); let L = I.links[uid];
+    if (!L || L.exp < Date.now() + 864e5) {
+      const ch = this.gameChannel() || await this.chanId(/g[ée]n[ée]ral|bienvenue|accueil/i, 0); if (!ch) return '⚠️ Je ne trouve pas de salon pour créer ton lien.';
+      const r = await this.discord('POST', `/channels/${ch}/invites`, { max_age: 604800, max_uses: 0, unique: true, temporary: false });
+      if (!r || !r.code) return '⚠️ Je n\'ai pas pu créer ton lien (le bot a besoin de la permission « Créer une invitation »).';
+      L = I.links[uid] = { code: r.code, exp: Date.now() + 604800e3 }; I.codes[r.code] = { uid, uses: r.uses || 0 }; this.save();
+    }
+    const top = Object.entries(I.count).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id, n], i) => `${['🥇', '🥈', '🥉'][i]} ${((this.profiles[id] || (this.srv().mem || {})[id] || {}).name) || 'Quelqu\'un'} : ${n}`).join('\n');
+    return `🔗 **Ton lien d'invitation perso** (valable 7 jours) :\nhttps://discord.gg/${L.code}\n\nChaque nouveau membre qui rejoint avec **ce lien** te rapporte **+100 🪙**. ⚠️ Seuls les liens créés avec \`/inviter\` comptent.\nTu as fait venir **${I.count[uid] || 0}** personne(s).${top ? `\n\n**Top recruteurs** (rôle 🔗 Recruteur au n°1) :\n${top}` : ''}`;
+  }
+  async inviteTrack(newId, isBot) {
+    const I = this.inv(); if (isBot) return; const g = this.env.GUILD_ID; if (!Object.keys(I.codes).length) { I.seen[newId] = 1; this.save(); return; }
+    const list = await this.discord('GET', `/guilds/${g}/invites`); if (!Array.isArray(list)) return;
+    let who = null; for (const v of list) { const c = I.codes[v.code]; if (!c) continue; if ((v.uses || 0) > c.uses) { if (!who) who = c.uid; c.uses = v.uses || 0; } }
+    const fresh = !I.seen[newId]; I.seen[newId] = 1; this.save();
+    if (!who || !fresh || who === newId) return;
+    I.count[who] = (I.count[who] || 0) + 1; const p = this.liveProfile(who); p.coins += 100; this.addXP(p, 30); this.pushProf(p); this.played('invite'); this.save();
+    const nm = ((this.srv().mem || {})[newId] || {}).name || 'un nouveau membre';
+    const ch = await this.chanId(/mini-jeux/i, 0) || this.gameChannel();
+    if (ch) await this.discord('POST', `/channels/${ch}/messages`, { content: `🔗 **${p.name}** a fait venir **${nm}** dans La Maison : **+100 🪙** ! (${I.count[who]} au total) — Toi aussi : \`/inviter\``, allowed_mentions: { parse: [] } });
+    await this.syncInviteRole().catch(() => {});
+  }
+  async syncInviteRole() {
+    const I = this.inv(), g = this.env.GUILD_ID; const top = Object.entries(I.count).sort((a, b) => b[1] - a[1])[0]; if (!top) return;
+    const roles = await this.discord('GET', `/guilds/${g}/roles`); if (!roles) return; let r = roles.find(x => x.id === I.role) || roles.find(x => x.name === '🔗 Recruteur');
+    if (!r) r = await this.discord('POST', `/guilds/${g}/roles`, { name: '🔗 Recruteur', color: 0x4fe3ff, hoist: false, mentionable: false }); if (!r) return;
+    I.role = r.id; if (I.holder && I.holder !== top[0]) await this.discord('DELETE', `/guilds/${g}/members/${I.holder}/roles/${r.id}`);
+    I.holder = top[0]; this.save(); await this.discord('PUT', `/guilds/${g}/members/${top[0]}/roles/${r.id}`);
+  }
   // 📊 compteur de parties par jeu (total + semaine en cours + joueurs)
   played(g, n = 1) { const w = this.world; const P = w.plays = w.plays || {}; const wk = weekKey(); if (w.playsWk !== wk) { w.playsWk = wk; for (const k in P) P[k].w = 0; }
     const x = P[g] = P[g] || { t: 0, w: 0, last: 0 }; x.t++; x.w++; x.pl = (x.pl || 0) + n; x.last = Date.now(); }
-  playsMsg() { const P = this.world.plays || {}; const L = { quiz: '❓ Quiz Discord', quizs: '🎯 Quiz spécial', mega: '🧠 Méga quiz', race: '🏎️ Grand Prix', click: '⚡ Test de clic', duel: '⚔️ Duel (appli)', duelD: '🎲 Duel de dés', mel: '🎵 Mélodie', draw: '🎨 Dessin', lg: '🐺 Loup-garou', slot: '🎰 Machine à sous', bj: '🃏 Blackjack', roul: '🎡 Roulette', pet: '🐾 Combat de pets', mot: '🔍 Mot mystère', coffre: '🎁 Coffre', voc: '🎙️ Coffres vocaux' };
+  playsMsg() { const P = this.world.plays || {}; const L = { invite: '🔗 Invitations', quiz: '❓ Quiz Discord', quizs: '🎯 Quiz spécial', mega: '🧠 Méga quiz', race: '🏎️ Grand Prix', click: '⚡ Test de clic', duel: '⚔️ Duel (appli)', duelD: '🎲 Duel de dés', mel: '🎵 Mélodie', draw: '🎨 Dessin', lg: '🐺 Loup-garou', slot: '🎰 Machine à sous', bj: '🃏 Blackjack', roul: '🎡 Roulette', pet: '🐾 Combat de pets', mot: '🔍 Mot mystère', coffre: '🎁 Coffre', voc: '🎙️ Coffres vocaux' };
     const rows = Object.entries(P).sort((a, b) => b[1].w - a[1].w || b[1].t - a[1].t);
     if (!rows.length) return '📊 Aucune partie comptée pour l\'instant (le compteur vient d\'être lancé).';
     return '📊 **Parties jouées** — cette semaine · depuis le début\n' + rows.map(([k, v]) => `${L[k] || k} : **${v.w}** · ${v.t}${v.pl ? ` (${v.pl} joueurs au total)` : ''}`).join('\n'); }

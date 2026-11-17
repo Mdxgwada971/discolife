@@ -57,7 +57,7 @@ export function installGateway(House) {
           S.ready = true; this.srvPush(true); break;
         case 'CHANNEL_CREATE': case 'CHANNEL_UPDATE': if (d.guild_id === this.env.GUILD_ID) { this.gwChan(d); this.srvPush(true); } break;
         case 'CHANNEL_DELETE': delete S.ch[d.id]; this.srvPush(true); break;
-        case 'GUILD_MEMBER_ADD': if (d.guild_id === this.env.GUILD_ID) { this.gwMem(d); this.gwWelcome(d); try { this.liveStat(d.user.id, 'm', 0); this.L().day.joins++; } catch (e) {} } break;
+        case 'GUILD_MEMBER_ADD': if (d.guild_id === this.env.GUILD_ID) { this.gwMem(d); this.gwWelcome(d); this.inviteTrack(d.user.id, d.user.bot).catch(e => console.log('invite', e)); try { this.liveStat(d.user.id, 'm', 0); this.L().day.joins++; } catch (e) {} } break;
         case 'GUILD_MEMBER_UPDATE': if (d.guild_id === this.env.GUILD_ID) this.gwMem(d); break;
         case 'VOICE_STATE_UPDATE': {
           if (d.guild_id !== this.env.GUILD_ID) break; if (d.user_id === this.env.CLIENT_ID) { this._botVoice = d.channel_id || null; break; } if (d.member) this.gwMem(d.member);
