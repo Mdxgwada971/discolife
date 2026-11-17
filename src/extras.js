@@ -181,6 +181,24 @@ export function installExtras(House) {
     },
 
     // annonce pour tout le monde (@everyone) avec la vidéo, une seule fois
+    async announceUpdate() { // annonce générale de la mise à jour de novembre (une seule fois)
+      const X = this.X(); if (X.majNov17 === 1) return; const ch = this.env.ANNOUNCE_CHANNEL_ID || this.env.GAME_CHANNEL_ID; if (!ch) return; X.majNov17 = 1; this.save();
+      const base = 'https://discolife.warren-molongo.workers.dev';
+      const r = await this.discord('POST', `/channels/${ch}/messages`, {
+        content: '@everyone 🚀 **Grosse mise à jour de Discolife !**', allowed_mentions: { parse: ['everyone'] },
+        embeds: [{ color: 0xff4fa8, title: '🏠 Discolife passe au niveau supérieur', image: { url: base + '/gifs/annonce.gif' },
+          description: [
+            '🏎️ **Grand Prix tout neuf** : un vrai circuit animé, **3 tours**, des **virages** où il faut doser (sinon dérapage 💨), la **nitro** 🔥, l\'**aspiration** derrière un pilote et le **départ parfait** ⚡. Le meilleur temps gagne le rôle **🏎️ Pilote** !',
+            '🔧 **Garage amélioré** : aperçu en grand de ta caisse, **7 nouvelles modifs** (bandes de course, ailes élargies, lame avant…), **couleur des jantes**, phares colorés, et chaque voiture affiche son **% d\'accélération**. Les réglages s\'appliquent tout de suite.',
+            '🎁 **Coffre vocal** : toutes les **2 h en vocal**, un coffre de pièces… qui grossit à chaque fois (jusqu\'à 600) ! Ta progression est dans `/profil`.',
+            '🧠 **Près de 300 nouvelles questions** et 6 nouveaux thèmes : ⚽ sport, 🎵 musique, 🎬 films & mangas, 🎮 jeux vidéo, 🌍 géo et 🌴 **Guadeloupe & Antilles**.',
+            '🐾 **Animalerie** : 15 animaux et des **shiny** argent, or et arc-en-ciel 🌈 · 🎵 **Studio** : la musique joue pour tout le monde · ⚡ **Réflexe éclair** : le rôle du record du test de clic.',
+            '', '👉 Lance l\'Activité Discolife dans un salon vocal, ou clique ci-dessous !'
+          ].join('\n'), footer: { text: 'Bonne partie à tous · La Maison' } }],
+        components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Ouvrir Discolife', emoji: { name: '🏠' }, custom_id: 'launch:annonce' }, { type: 2, style: 5, label: 'Version navigateur', url: base }] }]
+      });
+      if (!r) { X.majNov17 = 0; this.save(); console.log('annonce maj : échec'); }
+    },
     async announceTutorial() {
       const X = this.X(); if (X.tutoAnn === 1) return; const ch = this.env.GAME_CHANNEL_ID; if (!ch) return;
       try { const r = await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request('https://discolife.warren-molongo.workers.dev/tuto-discolife.mp4')) : fetch('https://discolife.warren-molongo.workers.dev/tuto-discolife.mp4')); if (!r.ok) return;

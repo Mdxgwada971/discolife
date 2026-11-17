@@ -396,7 +396,7 @@ export class House extends DurableObject {
         this.save(); return;
       }
       case 'park': {
-        if (this.limited(a.id, 'park', 8000)) return this.toast(a.id, 'Attends un peu avant de regarer');
+        if (this.limited(a.id, 'park', 500)) return;
         if (!MODELS.includes(m.model) || !/^#[0-9a-f]{6}$/i.test(m.col || '')) return;
         if (CARS[m.model][1] && !p.owned.includes('car_' + m.model)) return this.toast(a.id, `🔒 Achète d'abord la ${MODEL_LABEL[m.model]} à la concession`);
         let spot = p.car ? p.car.spot : null;
@@ -636,7 +636,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v38'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); for (const k of ['race', 'click']) await this.syncRecordRole(k).catch(e => console.log('record role', e)); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
+  async setupCheck() { const V = 'v39'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); this.announceUpdate().catch(e => console.log('annonce maj', e)); for (const k of ['race', 'click']) await this.syncRecordRole(k).catch(e => console.log('record role', e)); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
