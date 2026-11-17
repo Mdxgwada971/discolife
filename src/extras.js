@@ -200,7 +200,7 @@ export function installExtras(House) {
       if (!r) { X.majNov17 = 0; this.save(); console.log('annonce maj : échec'); }
     },
     async announceRecruit() { // 2e annonce : recrutement (programmée 1 h après la mise à jour)
-      const X = this.X(); if (X.recruitAnn === 1 || Date.now() < Date.UTC(2026, 10, 17, 19, 40)) return; const ch = this.env.ANNOUNCE_CHANNEL_ID || this.env.GAME_CHANNEL_ID; if (!ch) return; X.recruitAnn = 1; this.save();
+      const X = this.X(); if (X.recruitAnn === 1 || Date.now() < Date.UTC(2026, 10, 17, 18, 0)) return; const ch = this.env.ANNOUNCE_CHANNEL_ID || this.env.GAME_CHANNEL_ID; if (!ch) return; X.recruitAnn = 1; this.save();
       const base = 'https://discolife.warren-molongo.workers.dev';
       const r = await this.discord('POST', `/channels/${ch}/messages`, {
         content: '@everyone 🏠 **La Maison ouvre ses portes : ramène ta team !**', allowed_mentions: { parse: ['everyone'] },
