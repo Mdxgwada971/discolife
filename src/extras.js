@@ -199,6 +199,21 @@ export function installExtras(House) {
       });
       if (!r) { X.majNov17 = 0; this.save(); console.log('annonce maj : échec'); }
     },
+    async announceRecruit() { // 2e annonce : recrutement (programmée 1 h après la mise à jour)
+      const X = this.X(); if (X.recruitAnn === 1 || Date.now() < Date.UTC(2026, 10, 17, 19, 40)) return; const ch = this.env.ANNOUNCE_CHANNEL_ID || this.env.GAME_CHANNEL_ID; if (!ch) return; X.recruitAnn = 1; this.save();
+      const base = 'https://discolife.warren-molongo.workers.dev';
+      const r = await this.discord('POST', `/channels/${ch}/messages`, {
+        content: '@everyone 🏠 **La Maison ouvre ses portes : ramène ta team !**', allowed_mentions: { parse: ['everyone'] },
+        embeds: [{ color: 0x4fe3ff, title: 'Comment ça marche ?', image: { url: base + '/gifs/nouveau.gif' }, description: [
+          '🔗 **1. Invite tes potes avec `/inviter`**', 'Tape `/inviter` pour avoir **ton lien perso**. Chaque nouveau qui rejoint avec ce lien te rapporte **+100 🪙** ! ⚠️ Seuls les liens créés avec `/inviter` comptent. Le meilleur recruteur gagne le rôle **🔗 Recruteur** 😎', '',
+          '🤝 **2. Recrute-les dans ton équipe**', 'Un pote qui débarque, c\'est peut-être ton futur coéquipier 👀 Les chefs d\'équipe VIP recrutent avec `/recruter`. Chaque équipe a son propre salon privé.', '',
+          '🏆 **3. Montez au sommet**', 'Courses, quiz, coffres vocaux, Loup-garou… Tout ce que vous faites rapporte. Plus votre équipe est grande et active, plus elle grimpe dans `/classement`. Objectif : devenir **l\'équipe n°1 de La Maison** 👑', '',
+          '🎮 **Pour commencer**', 'Lance l\'Activité **Discolife** dans un salon vocal, fais `/liste-jeux` pour voir tous les jeux, et reste en vocal pour remplir tes coffres 🎁', '',
+          'Alors, qui aura la plus grosse équipe du serveur ? 🔥'].join('\n') }],
+        components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Ouvrir Discolife', emoji: { name: '🏠' }, custom_id: 'launch:annonce' }] }]
+      });
+      if (!r) { X.recruitAnn = 0; this.save(); }
+    },
     async announceTutorial() {
       const X = this.X(); if (X.tutoAnn === 1) return; const ch = this.env.GAME_CHANNEL_ID; if (!ch) return;
       try { const r = await (this.env.ASSETS ? this.env.ASSETS.fetch(new Request('https://discolife.warren-molongo.workers.dev/tuto-discolife.mp4')) : fetch('https://discolife.warren-molongo.workers.dev/tuto-discolife.mp4')); if (!r.ok) return;

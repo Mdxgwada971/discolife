@@ -300,6 +300,7 @@ export class House extends DurableObject {
   nextTick() { if (this.sockets().length) return 30000; let n = 300000; const L = this.world.live; if (L && L.quiz && !L.quiz.done) n = 30000; if (!this._asleep) n = Math.min(n, 120000); for (const e of Object.values(this.world.events || {})) if (!e.reminded) n = Math.min(n, Math.max(15000, e.ts - 15 * 60e3 - Date.now())); return n; }
   async alarmBody() {
     try { await this.vocTick(); } catch (e) { console.log('voc', e); }
+    try { await this.announceRecruit(); } catch (e) { console.log('recrut', e); }
     const seen = new Set();
     for (const ws of this.sockets()) {
       const a = this.att(ws); if (!a.id || seen.has(a.id)) continue; seen.add(a.id);
