@@ -49,7 +49,7 @@ export function installGateway(House) {
       switch (m.t) {
         case 'READY': this._gwSession = gw.session = d.session_id; this._gwResume = d.resume_gateway_url || null; this._gwFails = 0; this._gwNext = 0; break;
         case 'RESUMED': this._gwFails = 0; this._gwNext = 0; break;
-        case 'GUILD_CREATE': if (d.id !== this.env.GUILD_ID) break;
+        case 'GUILD_CREATE': if (d.id !== this.env.GUILD_ID) break; this.world.afkCh = d.afk_channel_id || null;
           S.ch = {}; for (const c of d.channels || []) this.gwChan(c);
           for (const mb of d.members || []) this.gwMem(mb);
           S.voice = {}; for (const v of d.voice_states || []) if (v.channel_id && v.user_id !== this.env.CLIENT_ID) S.voice[v.user_id] = { ch: v.channel_id, mute: !!(v.self_mute || v.mute), deaf: !!(v.self_deaf || v.deaf) };

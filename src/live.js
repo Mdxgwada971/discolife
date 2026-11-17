@@ -2,7 +2,7 @@
 // Salons stats en direct, vocaux à la demande, question du jour, quiz express, coffres surprise, anniversaires,
 // comptage collectif, duels à mise, mot mystère, membre de la semaine, starboard automatique, journal du matin, bannière.
 import { FURN } from './social.js';
-import { QOTD2, QUIZ2, WORDS2, QUIZ_2026, QUIZ_EASY, QUIZ_CARS, QUIZ_VALO, QUIZ_CULTURE } from './banks.js';
+import { QOTD2, QUIZ2, WORDS2, QUIZ_2026, QUIZ_EASY, QUIZ_CARS, QUIZ_VALO, QUIZ_CULTURE, QUIZ_2026B, QUIZ_SPORT, QUIZ_MUSIQUE, QUIZ_CINE, QUIZ_JV, QUIZ_GEO, QUIZ_ANTILLES, QUIZ_CARS2, QUIZ_EASY2 } from './banks.js';
 
 const QOTD = [
   'Pire jeu auquel tu as joué de ta vie ?', 'Si tu pouvais vivre dans un jeu vidéo, lequel ?', 'Ton plat préféré de tous les temps ?', 'La série que tu conseillerais à tout le monde ?',
@@ -36,7 +36,7 @@ const QUIZ = [
 const WORDS = ['banane', 'tornade', 'pingouin', 'galaxie', 'trompette', 'cactus', 'volcan', 'sardine', 'parapluie', 'dinosaure', 'citrouille', 'boussole', 'kangourou', 'moustache', 'baguette', 'chocolat',
   'licorne', 'toboggan', 'crocodile', 'escargot', 'aspirateur', 'girafe', 'brioche', 'fusee', 'chaussette', 'arcenciel', 'piscine', 'trampoline', 'hamster', 'saucisson', 'bonbon', 'pirate', 'robot',
   'raclette', 'tracteur', 'flamant', 'ananas', 'cornichon', 'grenouille', 'papillon', 'manette', 'pastèque', 'camembert', 'karaoke', 'igloo', 'requin', 'sorcier', 'trottinette', 'popcorn', 'koala'];
-const ALL_QOTD = [...new Set([...QOTD, ...QOTD2])], ALL_QUIZ = [...QUIZ, ...QUIZ2], ALL_WORDS = [...new Set([...WORDS, ...WORDS2].map(w => String(w).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '')))];
+const ALL_QOTD = [...new Set([...QOTD, ...QOTD2])], ALL_QUIZ = [...QUIZ, ...QUIZ2, ...QUIZ_SPORT, ...QUIZ_MUSIQUE, ...QUIZ_CINE, ...QUIZ_JV, ...QUIZ_GEO, ...QUIZ_ANTILLES, ...QUIZ_CARS2], ALL_WORDS = [...new Set([...WORDS, ...WORDS2].map(w => String(w).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '')))];
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/['’`.-]/g, ' ').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
 function lev(a, b) { const m = a.length, n = b.length; if (!m) return n; if (!n) return m; let prev = Array.from({ length: n + 1 }, (_, j) => j);
   for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; } return prev[n]; }
@@ -186,7 +186,7 @@ export function installLive(House) {
       const ch = await this.chanId(/mini-jeux/i, 0) || await this.chanId(/g[ée]n[ée]ral/i, 0); if (!ch) return; const L = this.L();
       const q = ALL_QUIZ[this.bag('quiz', ALL_QUIZ.length)];
       await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: 0x4fe3ff, title: '⚡ Quiz express !', description: `**${q[0]}**\n\nLe premier qui répond juste ici gagne **25 🪙** · 3 minutes !\nLe bot te dit si tu chauffes 🔥 ou si tu refroidis 🥶, et propose un indice au bout de 3 essais ratés.` }] });
-      L.quiz = { ch, ans: q[1].map(norm), show: q[1][0], until: Date.now() + 180e3, done: false, fails: 0, hints: 0 };
+      L.quiz = { ch, ans: q[1].map(norm), show: q[1][0], until: Date.now() + 180e3, done: false, fails: 0, hints: 0 }; this.played('quiz');
     },
     // ---------------------------------------------------------------- 🎯 quiz spécial : 5 questions d'affilée
     gamesListMsg() {
@@ -205,8 +205,8 @@ export function installLive(House) {
         ], footer: { text: 'Toutes les pièces gagnées sont les mêmes dans Discord et dans Discolife' } }],
         components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Ouvrir Discolife', emoji: { name: '🏠' }, custom_id: 'launch:liste' }] }] };
     },
-    quizBank(t) { return ({ '2026': QUIZ_2026, voiture: QUIZ_CARS, valo: QUIZ_VALO, culture: QUIZ_CULTURE, easy: QUIZ_EASY })[t] || ALL_QUIZ; },
-    quizLabel(t) { return ({ '2026': 'l\'actu de 2026 🗞️', voiture: 'voitures 🏎️', valo: 'Valorant 🎯', culture: 'culture générale 📚', easy: 'questions faciles, tout le monde peut gagner 😄', mix: 'un peu de tout 🎲' })[t] || 'un peu de tout 🎲'; },
+    quizBank(t) { return ({ '2026': [...QUIZ_2026, ...QUIZ_2026B], voiture: [...QUIZ_CARS, ...QUIZ_CARS2], valo: QUIZ_VALO, culture: QUIZ_CULTURE, easy: [...QUIZ_EASY, ...QUIZ_EASY2], sport: QUIZ_SPORT, musique: QUIZ_MUSIQUE, cine: QUIZ_CINE, jv: QUIZ_JV, geo: QUIZ_GEO, antilles: QUIZ_ANTILLES })[t] || ALL_QUIZ; },
+    quizLabel(t) { return ({ '2026': 'l\'actu de 2026 🗞️', voiture: 'voitures 🏎️', valo: 'Valorant 🎯', culture: 'culture générale 📚', easy: 'questions faciles, tout le monde peut gagner 😄', sport: 'sport ⚽', musique: 'musique 🎵', cine: 'films, séries et mangas 🎬', jv: 'jeux vidéo 🎮', geo: 'géographie 🌍', antilles: 'Guadeloupe et Antilles 🌴', mix: 'un peu de tout 🎲' })[t] || 'un peu de tout 🎲'; },
     canQuiz(uid, isAdm) { const X = this.X(); return isAdm || (X.quizMasters || []).includes(uid); },
     quizMasterAuto() { // donne le droit aux quiz à Walid (pseudo Kuma) et Fariiko dès que le bot les voit sur le serveur
       const X = this.X(); X.quizMasters = X.quizMasters || []; X.qmFound = X.qmFound || {}; const mem = Object.values(this.srv().mem || {});
@@ -235,7 +235,7 @@ export function installLive(House) {
       for (const id of X.quizMasters || []) await this.discord('PUT', `/guilds/${g}/members/${id}/roles/${r.id}`);
       for (const id of X.mjRemoved || []) await this.discord('DELETE', `/guilds/${g}/members/${id}/roles/${r.id}`); X.mjRemoved = []; this.save();
     },
-    async quizSpecialStart(byName, theme, mega) {
+    async quizSpecialStart(byName, theme, mega) { this.played(mega ? 'mega' : 'quizs');
       const L = this.L(); if (L.qs && L.qs.on) return '⏳ Un quiz (spécial ou méga) est déjà en cours.';
       const ch = await this.chanId(/mini-jeux/i, 0) || await this.chanId(/g[ée]n[ée]ral/i, 0); if (!ch) return '❌ Salon #mini-jeux introuvable.';
       const th = ['2026', 'voiture', 'valo', 'culture', 'easy', 'mix'].includes(theme) ? theme : (mega ? 'easy' : '2026');
@@ -317,6 +317,7 @@ export function installLive(House) {
       // mot mystère
       const w = L.word; if (w && !w.found && w.d === dayKey() && new RegExp(`(^|[^a-z])${w.w}([^a-z]|$)`).test(norm(text).replace(/'/g, ' '))) {
         w.found = uid; const p = this.liveProfile(uid); p.coins += 50; this.pushProf(p); await this.react(d.channel_id, d.id, '🔍');
+        this.played('mot');
         await this.discord('POST', `/channels/${d.channel_id}/messages`, { content: `🔍 <@${uid}> a trouvé le **mot mystère** du jour : « **${w.w}** » ! **+50 🪙**`, allowed_mentions: { users: [uid] } });
         this.log('info', p.name, `trouve le mot mystère « ${w.w} » 🔍`);
       }
@@ -464,6 +465,7 @@ export function installLive(House) {
     async liveCommand(d, me, reply, opt, who, isAdm, chId, follow) {
       if (d.name === 'jeux') return reply(this.gamesEmbed());
       if (d.name === 'liste-jeux') return reply(this.gamesListMsg());
+      if (d.name === 'stats-jeux') return reply(this.playsMsg());
       if (d.name === 'podium') { const v = this.mgView('podium'), md = ['🥇', '🥈', '🥉'], P = Object.values(this.profiles);
         const lst = (a, f) => a.length ? a.map((x, i) => `${md[i]} **${x.n}** · ${f(x.v)}`).join('\n') : '*Personne encore… sois le premier !*';
         const rc = v.rec.click, rr = v.rec.race; const topBy = (k, n) => P.filter(p => (k(p) || 0) > 0).sort((a, b) => k(b) - k(a)).slice(0, n);
@@ -495,6 +497,7 @@ export function installLive(House) {
         if (w.found) return reply(`🔍 Le mot mystère du jour a déjà été trouvé : « **${w.w}** ». Nouveau mot demain !`);
         const g = norm(opt(d, 'essai') || ''); if (!g) return reply('Propose un mot : `/mot essai: ...`');
         if (g === w.w) { w.found = me.id; const gain = Math.max(20, 50 - 10 * (w.hints || 0)); me.coins += gain; this.pushProf(me); this.log('info', me.name, `trouve le mot mystère « ${w.w} » 🔍`);
+          this.played('mot');
           return reply({ content: `🎉 <@${me.id}> a trouvé le **mot mystère** : « **${w.w}** » ! **+${gain} 🪙**`, allowed_mentions: { users: [me.id] } }); }
         const h = heat(g, [w.w]); w.fails = (w.fails || 0) + 1; this.save();
         if (w.fails % 5 === 0 && (w.hints || 0) < 3) await this.offerHint('mot', chId);
@@ -524,6 +527,7 @@ export function installLive(House) {
         const t = who(d); if (!t || t === 'bot' || t.id === me.id) return reply('Choisis un vrai adversaire 🙂'); const mise = Math.max(0, Math.min(500, Math.floor(+opt(d, 'mise') || 0)));
         if (mise > me.coins) return reply(`Tu n'as que ${me.coins} 🪙.`); const L = this.L(); L.dd = L.dd || {}; const id = Date.now().toString(36);
         L.dd[id] = { id, a: me.id, b: t.id, an: me.name, bn: t.name, mise, t: Date.now() }; this.save();
+        this.played('duelD', 2);
         return reply({ content: `⚔️ <@${t.id}>, **${me.name}** te défie en duel de dés${mise ? ` pour **${mise} 🪙** chacun` : ''} ! Le plus gros lancer remporte ${mise ? 'la mise' : 'la gloire'}.`, allowed_mentions: { users: [t.id] },
           components: [{ type: 1, components: [{ type: 2, style: 3, label: 'Accepter', emoji: { name: '🎲' }, custom_id: `dd:${id}:1` }, { type: 2, style: 4, label: 'Refuser', custom_id: `dd:${id}:0` }] }] });
       }
@@ -543,6 +547,7 @@ export function installLive(House) {
         if (r < 0.15) { const keys = Object.keys(FURN).filter(f => !FURN[f].ltd); const f = keys[rndInt(0, keys.length - 1)]; p.furn = p.furn || {}; p.furn[f] = (p.furn[f] || 0) + 1; txt = `${FURN[f].e} **${FURN[f].n}** pour sa chambre`; }
         else { const n = r < 0.4 ? rndInt(100, 150) : rndInt(20, 80); p.coins += n; txt = `**${n} 🪙**`; }
         this.pushProf(p); this.log('info', p.name, `ouvre le coffre mystère du serveur 🎁`);
+        this.played('coffre');
         return reply({ embeds: [{ color: 0x3bd16f, title: '🎁 Coffre ouvert !', description: `<@${p.id}> a été le plus rapide et gagne ${txt} !` }], components: [] });
       }
       if (k === 'dd') {

@@ -299,6 +299,7 @@ export class House extends DurableObject {
   // personne sur Discolife : réveil toutes les 5 min (plus tôt si un rappel de soirée approche) pour économiser le quota Cloudflare
   nextTick() { if (this.sockets().length) return 30000; let n = 300000; const L = this.world.live; if (L && L.quiz && !L.quiz.done) n = 30000; if (!this._asleep) n = Math.min(n, 120000); for (const e of Object.values(this.world.events || {})) if (!e.reminded) n = Math.min(n, Math.max(15000, e.ts - 15 * 60e3 - Date.now())); return n; }
   async alarmBody() {
+    try { await this.vocTick(); } catch (e) { console.log('voc', e); }
     const seen = new Set();
     for (const ws of this.sockets()) {
       const a = this.att(ws); if (!a.id || seen.has(a.id)) continue; seen.add(a.id);
@@ -482,6 +483,7 @@ export class House extends DurableObject {
       case 'duelAct': return this.duelAct(p, m.gid, m.k);
       case 'race': return this.raceJoin(p);
       case 'press': return this.racePress(p);
+      case 'nitro': return this.raceNitro(p);
       case 'click': return this.clickJoin(p);
       case 'clickHit': return this.clickHit(p, m.ms, m.early);
       case 'mg': return this.mgMsg(ws, a, p, m);
@@ -591,10 +593,11 @@ export class House extends DurableObject {
       { name: 'classement', description: 'Classement des équipes et des joueurs Discolife', dm_permission: false },
       { name: 'lancer', description: 'Lance un jeu sur le serveur (boss et maîtres du jeu)', dm_permission: false, options: [{ type: 3, name: 'jeu', description: 'Le jeu à lancer', required: true, choices: [{ name: '⚡ Quiz express', value: 'quiz' }, { name: '🎁 Coffre surprise', value: 'coffre' }, { name: '💬 Question du jour', value: 'question' }] }] },
       { name: 'podium', description: 'Le podium du serveur et les records à battre', dm_permission: false },
+      { name: 'stats-jeux', description: '📊 Combien de parties par jeu (cette semaine et au total)', default_member_permissions: '8', dm_permission: false },
       { name: 'liste-jeux', description: 'Tous les jeux du serveur et de Discolife, avec leur commande', dm_permission: false },
       { name: 'boutique', description: 'Dépense tes pièces : couleur de pseudo, rôle Mécène…', dm_permission: false },
-      { name: 'mega-quiz', description: 'Lance un méga quiz de 10 questions avec podium (boss et maîtres du jeu)', dm_permission: false, options: [{ type: 3, name: 'theme', description: 'Thème (par défaut : facile)', required: false, choices: [{ name: '🗞️ Actu de 2026', value: '2026' }, { name: '🏎️ Voitures', value: 'voiture' }, { name: '🎯 Valorant', value: 'valo' }, { name: '📚 Culture générale', value: 'culture' }, { name: '😄 Facile', value: 'easy' }, { name: '🎲 Un peu de tout', value: 'mix' }] }] },
-      { name: 'quiz-special', description: 'Lance un quiz spécial de 5 questions avec podium (boss et maîtres du jeu)', dm_permission: false, options: [{ type: 3, name: 'theme', description: 'Thème (par défaut : actu 2026)', required: false, choices: [{ name: '🗞️ Actu de 2026', value: '2026' }, { name: '🏎️ Voitures', value: 'voiture' }, { name: '🎯 Valorant', value: 'valo' }, { name: '📚 Culture générale', value: 'culture' }, { name: '😄 Facile', value: 'easy' }, { name: '🎲 Un peu de tout', value: 'mix' }] }] },
+      { name: 'mega-quiz', description: 'Lance un méga quiz de 10 questions avec podium (boss et maîtres du jeu)', dm_permission: false, options: [{ type: 3, name: 'theme', description: 'Thème (par défaut : facile)', required: false, choices: [{ name: '🗞️ Actu de 2026', value: '2026' }, { name: '⚽ Sport', value: 'sport' }, { name: '🎵 Musique', value: 'musique' }, { name: '🎬 Films, séries, mangas', value: 'cine' }, { name: '🎮 Jeux vidéo', value: 'jv' }, { name: '🌍 Géographie', value: 'geo' }, { name: '🌴 Guadeloupe & Antilles', value: 'antilles' },  { name: '🏎️ Voitures', value: 'voiture' }, { name: '🎯 Valorant', value: 'valo' }, { name: '📚 Culture générale', value: 'culture' }, { name: '😄 Facile', value: 'easy' }, { name: '🎲 Un peu de tout', value: 'mix' }] }] },
+      { name: 'quiz-special', description: 'Lance un quiz spécial de 5 questions avec podium (boss et maîtres du jeu)', dm_permission: false, options: [{ type: 3, name: 'theme', description: 'Thème (par défaut : actu 2026)', required: false, choices: [{ name: '🗞️ Actu de 2026', value: '2026' }, { name: '⚽ Sport', value: 'sport' }, { name: '🎵 Musique', value: 'musique' }, { name: '🎬 Films, séries, mangas', value: 'cine' }, { name: '🎮 Jeux vidéo', value: 'jv' }, { name: '🌍 Géographie', value: 'geo' }, { name: '🌴 Guadeloupe & Antilles', value: 'antilles' },  { name: '🏎️ Voitures', value: 'voiture' }, { name: '🎯 Valorant', value: 'valo' }, { name: '📚 Culture générale', value: 'culture' }, { name: '😄 Facile', value: 'easy' }, { name: '🎲 Un peu de tout', value: 'mix' }] }] },
       { name: 'quiz-acces', description: 'Nomme ou retire un 🎲 Maître du jeu (réservé au boss)', default_member_permissions: '8', dm_permission: false, options: [{ type: 6, name: 'membre', description: 'Le membre', required: false }, { type: 3, name: 'action', description: 'Ajouter ou retirer', required: false, choices: [{ name: 'Ajouter', value: 'ajouter' }, { name: 'Retirer', value: 'retirer' }] }] },
       { name: 'jeux-roles', description: 'Choisis tes jeux pour être prévenu des parties', dm_permission: false },
       { name: 'sauvegarde', description: 'Envoie une sauvegarde complète dans le salon staff (réservé au boss)', default_member_permissions: '8', dm_permission: false },
@@ -633,7 +636,7 @@ export class House extends DurableObject {
     for (const t of Object.values(w.teams)) this.vipRole(t.vip, true);
     this.save();
   }
-  async setupCheck() { const V = 'v36'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); for (const k of ['race', 'click']) await this.syncRecordRole(k).catch(e => console.log('record role', e)); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
+  async setupCheck() { const V = 'v38'; if (this.world.setupV === V) return; this.world.setupV = V; this.save(); for (const k of ['race', 'click']) await this.syncRecordRole(k).catch(e => console.log('record role', e)); await this.registerCommands(); try { await this.ensureLive(); } catch (e) { console.log('live setup', e); } try { await this.ensureGameRoles(); } catch (e) { console.log('game roles', e); } try { await this.ensureShopRoles(); } catch (e) { console.log('shop roles', e); } try { await this.ensureSoundboard(); } catch (e) { console.log('soundboard', e); } try { await this.ensureIcon(); } catch (e) { console.log('icon', e); } try { await this.ensureAppEmojis(); } catch (e) { console.log('emojis', e); } try { await this.postEmojiTest(); } catch (e) { console.log('emoji test', e); } try { await this.postTutorial(); } catch (e) { console.log('tuto', e); } try { await this.announceTutorial(); } catch (e) { console.log('tuto annonce', e); } try { const L = this.L(); L.banSlot = null; await this.updateBanner(); } catch (e) { console.log('banner', e); } }
   get vcSeen() { return this._vc || (this._vc = {}); }
   async voiceMap() {
     const w = this.world; if (w.vmap && Date.now() - (w.vmapT || 0) < 600e3) return w.vmap;
@@ -834,7 +837,7 @@ export class House extends DurableObject {
             return reply({ embeds: [{ title: `${T[t.id] ? '⭐ ' : ''}${t.name}`, color: tm ? parseInt(tm.col.slice(1), 16) : 0x5865f2,
               thumbnail: t.avatar ? { url: `https://cdn.discordapp.com/avatars/${t.id}/${t.avatar}.png?size=128` } : undefined,
               description: `Niveau **${t.lvl}** · ${roleOf(t.lvl)}\n${tm ? `Équipe **${tm.name}**` : 'Pas d\'équipe'}`,
-              fields: [{ name: '🪙 Pièces', value: String(t.coins), inline: true }, { name: '🎙️ Vocal', value: `${Math.floor((t.voiceSec || 0) / 60)} min`, inline: true }, { name: '🔥 Série', value: `${t.streak || 0} j`, inline: true },
+              fields: [{ name: '🪙 Pièces', value: String(t.coins), inline: true }, { name: '🎙️ Vocal Discord', value: `${Math.floor((t.vocSec || 0) / 3600)} h ${Math.floor((t.vocSec || 0) % 3600 / 60)} min · 🎁 prochain coffre (${this.vocChest(Math.floor((t.vocSec || 0) / 7200) + 1)} 🪙) dans ${Math.ceil((7200 - (t.vocSec || 0) % 7200) / 60)} min`, inline: false }, { name: '🔥 Série', value: `${t.streak || 0} j`, inline: true },
                        { name: '🏁 Courses', value: String(t.stats.races || 0), inline: true }, { name: '⚔️ Duels', value: String(t.stats.duels || 0), inline: true }, { name: '🏅 Badges', value: String(t.badges.length), inline: true }] }] });
           }
         }
@@ -922,7 +925,7 @@ export class House extends DurableObject {
   duelAnswer(p, gid, ok) {
     const d = this.games.duels[gid]; if (!d || d.state !== 'pending' || d.b !== p.id) return;
     if (!ok) { d.state = 'done'; d.log = `${d.bn} refuse le duel`; this.bcast({ t: 'duel', d }); delete this.games.duels[gid]; return; }
-    d.state = 'live'; d.at = Date.now(); d.log = `Le duel commence ! À ${d.an} de jouer.`; this.bcast({ t: 'duel', d });
+    d.state = 'live'; d.at = Date.now(); this.played('duel', 2); d.log = `Le duel commence ! À ${d.an} de jouer.`; this.bcast({ t: 'duel', d });
   }
   duelAct(p, gid, k) {
     const d = this.games.duels[gid]; if (!d || d.state !== 'live' || d.turn !== p.id) return;
@@ -941,7 +944,7 @@ export class House extends DurableObject {
   }
 
   // ------------------------------------------------------------ course (2 joueurs minimum)
-  raceView() { const r = this.games.race; if (!r) return null; return { id: r.id, state: r.state, t: r.t, players: Object.values(r.players).map(x => ({ id: x.id, n: x.n, p: x.p, car: x.car, bonus: x.bonus, ms: x.ms, pb: x.pb })), order: r.order, solo: !!r.solo, bets: Object.values(r.bets || {}).reduce((o, b) => { o[b.on] = (o[b.on] || 0) + b.n; return o; }, {}) }; }
+  raceView() { const r = this.games.race; if (!r) return null; return { id: r.id, state: r.state, t: r.t, players: Object.values(r.players).map(x => ({ id: x.id, n: x.n, p: x.p, car: x.car, bonus: x.bonus, ms: x.ms, pb: x.pb, ni: x.ni || 0, nit: (x.nitU || 0) > Date.now(), sk: (x.skU || 0) > Date.now(), ps: !!x.ps, asp: (x.aspU || 0) > Date.now(), col: x.col, model: x.model })), laps: 3, order: r.order, solo: !!r.solo, bets: Object.values(r.bets || {}).reduce((o, b) => { o[b.on] = (o[b.on] || 0) + b.n; return o; }, {}) }; }
   raceJoin(p) {
     let r = this.games.race;
     if (!r || r.state === 'done') {
@@ -952,7 +955,7 @@ export class House extends DurableObject {
     if (r.state !== 'lobby' || r.players[p.id]) return;
     const best = p.car ? p.car.model : (MODELS.filter(k => !CARS[k][1] || p.owned.includes('car_' + k)).sort((a, b) => CARS[b][1] - CARS[a][1])[0] || 'citadine');
     const bonus = carBonus(p, best);
-    r.players[p.id] = { id: p.id, n: p.name, p: 0, last: 0, car: MODEL_LABEL[best], bonus: Math.round(bonus * 100) };
+    r.players[p.id] = { id: p.id, n: p.name, p: 0, last: 0, car: MODEL_LABEL[best], bonus: Math.round(bonus * 100), ni: 0, col: (p.car && p.car.col) || '#ff4fa8', model: best };
     if (r.t - Date.now() < 6000 && r.t - r.id < 45000) r.t = Math.min(r.id + 45000, Date.now() + 6000);
     this.bcast({ t: 'race', r: this.raceView() });
   }
@@ -962,17 +965,26 @@ export class House extends DurableObject {
     if (Object.keys(r.players).length === 1) r.solo = true;
     if (!Object.keys(r.players).length) { for (const [uid, b] of Object.entries(r.bets || {})) { const q = this.profiles[uid]; if (q) { q.coins += b.n; this.pushProf(q); } } r.state = 'done'; r.cancel = true; this.bcast({ t: 'race', r: { ...this.raceView(), cancel: 'Pas assez de pilotes (2 minimum)' } }); return; }
     r.state = 'count'; r.t = Date.now() + 3000; this.bcast({ t: 'race', r: this.raceView() });
-    setTimeout(() => { r.state = 'live'; r.startAt = Date.now(); this.bcast({ t: 'race', r: this.raceView() }); r.iv = setInterval(() => this.bcast({ t: 'race', r: this.raceView() }), 200); setTimeout(() => this.raceEnd(r, true), 45000); }, 3000);
+    this.played('race', Object.keys(r.players).length); setTimeout(() => { r.state = 'live'; r.startAt = Date.now(); this.bcast({ t: 'race', r: this.raceView() }); r.iv = setInterval(() => this.bcast({ t: 'race', r: this.raceView() }), 200); setTimeout(() => this.raceEnd(r, true), 60000); }, 3000);
   }
   racePress(p) {
     const r = this.games.race; if (!r || r.state !== 'live') return; const x = r.players[p.id]; if (!x || x.p >= 1) return;
-    const t = Date.now(); if (t - x.last < 60) return; x.last = t; x.p = Math.min(1, x.p + .02 * (1 + (x.bonus || 0) / 100));
+    const t = Date.now(); if (t - x.last < 60) return; const gap = t - x.last; x.last = t;
+    // 🏁 circuit de 3 tours : chaque tour a 2 virages ; taper trop vite dans un virage = dérapage (gain réduit)
+    const f = (x.p * 3) % 1, corner = (f > .2 && f < .45) || (f > .7 && f < .95);
+    let k = .02 * (1 + (x.bonus || 0) / 100);
+    if (!x.started) { x.started = true; if (t - (r.startAt || t) < 400) { x.ps = true; x.p = Math.min(1, x.p + .03); } }
+    if (corner && gap < 125) { k *= .45; x.skU = t + 400; }
+    if ((x.nitU || 0) > t) k *= 1.8; else x.ni = Math.min(25, (x.ni || 0) + 1);
+    if (Object.values(r.players).some(o => o !== x && o.p > x.p && o.p - x.p < .035)) { k *= 1.15; x.aspU = t + 300; }
+    x.p = Math.min(1, x.p + k);
     if (x.p >= 1) { r.order.push(x.id); this.progress(p, 'race'); x.ms = t - (r.startAt || t);
       { const old = p.stats.raceBest; if (!old || x.ms < old) { p.stats.raceBest = x.ms; x.pb = true; } const rec = this.world.records.race; if (!rec || x.ms < rec.ms) this.newRecord('race', p, x.ms, `${(x.ms / 1000).toFixed(2)} s au Grand Prix`); this.pushProf(p); this.mgB('podium'); }
       if (r.solo) { this.raceEnd(r); return; }
       if (r.order.length === 1) { const k = 30 * this.mgMult('course'); p.coins += k; p.stats.races++; this.addXP(p, 40); this.badge(p, 'race_win'); this.log('race', p.name, `gagne le Grand Prix ! +${k} 🪙`, 'garage'); this.announce(`🏁 **${p.name}** gagne la course dans Discolife !`); this.pushProf(p); } }
     if (r.order.length >= Math.min(3, Object.keys(r.players).length)) this.raceEnd(r);
   }
+  raceNitro(p) { const r = this.games.race; if (!r || r.state !== 'live') return; const x = r.players[p.id]; if (!x || x.p >= 1 || (x.ni || 0) < 25) return; x.ni = 0; x.nitU = Date.now() + 2500; }
   raceEnd(r, timeout) { if (r.state === 'done') return; r.state = 'done'; clearInterval(r.iv); Object.values(r.players).sort((a, b) => b.p - a.p).forEach(x => { if (!r.order.includes(x.id)) r.order.push(x.id); }); try { this.raceSettle(r); } catch (e) { console.log('bets', e); } this.bcast({ t: 'race', r: this.raceView() }); }
 
   // ------------------------------------------------------------ test de clic (2 joueurs minimum)
@@ -993,6 +1005,7 @@ export class House extends DurableObject {
   clickStart(id) {
     const c = this.games.click; if (!c || c.id !== id || c.state !== 'lobby') return;
     if (Date.now() < c.t - 150) { setTimeout(() => this.clickStart(id), c.t - Date.now()); return; }
+    this.played('click', Object.keys(c.players).length);
     if (!Object.keys(c.players).length) { c.state = 'done'; return; } c.solo = Object.keys(c.players).length === 1;
     c.state = 'wait'; this.bcast({ t: 'click', c: this.clickView() });
     setTimeout(() => { c.state = 'go'; c.goAt = Date.now(); this.bcast({ t: 'click', c: this.clickView() }); setTimeout(() => this.clickEnd(c), 3500); }, rnd(1500, 4000));
@@ -1031,6 +1044,27 @@ export class House extends DurableObject {
     if (prev && prev !== rec.id) await this.discord('DELETE', `/guilds/${g}/members/${prev}/roles/${r.id}`);
     await this.discord('PUT', `/guilds/${g}/members/${rec.id}/roles/${r.id}`);
   }
+  // 🎙️ coffre vocal : toutes les 2 h passées en vocal sur Discord (pas en sourdine totale), un coffre qui grossit à chaque fois
+  vocChest(k) { return Math.min(600, 60 + (k - 1) * 30); }
+  async vocTick() {
+    const now = Date.now(), w = this.world, S = this.srv(); const dt = Math.min(360, Math.max(0, Math.round((now - (w.vocT || now)) / 1000))); w.vocT = now; if (!dt || !S.voice) return;
+    const afk = w.afkCh || null; const won = [];
+    for (const [uid, v] of Object.entries(S.voice)) {
+      if (!v || !v.ch || v.deaf || v.ch === afk) continue; const m = (S.mem || {})[uid]; if (m && m.bot) continue;
+      const p = this.liveProfile(uid); const before = p.vocSec || 0; p.vocSec = before + dt;
+      const k = Math.floor(p.vocSec / 7200); if (k > Math.floor(before / 7200)) { const g = this.vocChest(k); p.coins += g; p.vocChests = k; this.addXP(p, 20 + k * 5); this.played('voc'); this.pushProf(p); won.push([p, k, g]); this.toUser(uid, { t: 'toast', text: `🎁 Coffre vocal n°${k} : +${g} 🪙 ! Le prochain sera encore plus gros.` }); }
+    }
+    if (won.length) { const ch = await this.chanId(/mini-jeux/i, 0) || await this.chanId(/g[ée]n[ée]ral/i, 0);
+      if (ch) await this.discord('POST', `/channels/${ch}/messages`, { embeds: [{ color: 0xffd84a, title: '🎁 Coffre vocal ouvert !', description: won.map(([p, k, g]) => `**${p.name}** a passé **${k * 2} h** en vocal → coffre n°${k} : **+${g} 🪙** (prochain : ${this.vocChest(k + 1)} 🪙)`).join('\n') + '\n\nPlus tu restes en vocal, plus les coffres grossissent (toutes les 2 h) 🎙️' }] }); }
+    this.save();
+  }
+  // 📊 compteur de parties par jeu (total + semaine en cours + joueurs)
+  played(g, n = 1) { const w = this.world; const P = w.plays = w.plays || {}; const wk = weekKey(); if (w.playsWk !== wk) { w.playsWk = wk; for (const k in P) P[k].w = 0; }
+    const x = P[g] = P[g] || { t: 0, w: 0, last: 0 }; x.t++; x.w++; x.pl = (x.pl || 0) + n; x.last = Date.now(); }
+  playsMsg() { const P = this.world.plays || {}; const L = { quiz: '❓ Quiz Discord', quizs: '🎯 Quiz spécial', mega: '🧠 Méga quiz', race: '🏎️ Grand Prix', click: '⚡ Test de clic', duel: '⚔️ Duel (appli)', duelD: '🎲 Duel de dés', mel: '🎵 Mélodie', draw: '🎨 Dessin', lg: '🐺 Loup-garou', slot: '🎰 Machine à sous', bj: '🃏 Blackjack', roul: '🎡 Roulette', pet: '🐾 Combat de pets', mot: '🔍 Mot mystère', coffre: '🎁 Coffre', voc: '🎙️ Coffres vocaux' };
+    const rows = Object.entries(P).sort((a, b) => b[1].w - a[1].w || b[1].t - a[1].t);
+    if (!rows.length) return '📊 Aucune partie comptée pour l\'instant (le compteur vient d\'être lancé).';
+    return '📊 **Parties jouées** — cette semaine · depuis le début\n' + rows.map(([k, v]) => `${L[k] || k} : **${v.w}** · ${v.t}${v.pl ? ` (${v.pl} joueurs au total)` : ''}`).join('\n'); }
   newRecord(kind, p, v, txt) {
     const old = this.world.records[kind]; this.world.records[kind] = { ms: v, n: p.name, id: p.id, at: Date.now() }; p.coins += 30; this.pushProf(p); this.pushWorld();
     this.syncRecordRole(kind).catch(e => console.log('record role', e));

@@ -114,7 +114,7 @@ export function installMinigames(House) {
       const s = this.MG().melodie; if (!s || s.id !== id) return;
       if (s.st === 'lobby' && Date.now() < s.t - 150) { setTimeout(() => this.melodieNext(id), s.t - Date.now()); return; }
       if (s.round >= s.rounds) return this.melodieEnd(s);
-      s.tune = TUNES[s.order[s.round]]; s.round++; s.found = null; s.st = 'play'; s.t = Date.now() + 25000; this.mgB('melodie');
+      if (!s.round) this.played('mel', Object.keys(s.sc).length); s.tune = TUNES[s.order[s.round]]; s.round++; s.found = null; s.st = 'play'; s.t = Date.now() + 25000; this.mgB('melodie');
       const r = s.round; setTimeout(() => { if (s.st === 'play' && s.round === r) this.melodieReveal(s); }, 25000);
     },
     melodieReveal(s) { s.st = 'reveal'; s.t = Date.now() + 5000; this.mgB('melodie'); setTimeout(() => this.melodieNext(s.id), 5000); },
@@ -156,6 +156,7 @@ export function installMinigames(House) {
       if (s.st === 'lobby' && Date.now() < s.t - 150) { setTimeout(() => this.dessinNext(id), s.t - Date.now()); return; }
       if (s.st === 'lobby') { if (s.order.length < 2) { s.st = 'end'; s.cancel = 'Il faut au moins 2 joueurs'; this.bcast({ t: 'mg', g: 'dessin', s: { ...this.mgView('dessin'), cancel: s.cancel } }); return; } s.rounds = Math.min(8, s.order.length * (s.order.length <= 3 ? 2 : 1)); }
       if (s.round >= s.rounds) return this.dessinEnd(s);
+      if (!s.round) this.played('draw', s.order.length);
       s.drawer = s.order[s.round % s.order.length]; s.round++; s.word = DRAW_WORDS[rnd(DRAW_WORDS.length)]; s.found = []; s.strokes = []; s.st = 'draw'; s.t = Date.now() + 70000;
       this.bcast({ t: 'mgDraw', id: s.id, clear: true }); this.mgB('dessin'); this.toUser(s.drawer, { t: 'mgWord', id: s.id, w: s.word });
       const r = s.round; setTimeout(() => { if (s.st === 'draw' && s.round === r) this.dessinReveal(s); }, 70000);
@@ -186,19 +187,19 @@ export function installMinigames(House) {
       if (p.cas.n >= 150 && m.a !== 'hit' && m.a !== 'stand') return this.toast(a.id, '🎰 Le casino ferme pour toi aujourd\'hui (150 parties). Reviens demain !');
       const bet = Math.floor(+m.bet || 0); const okBet = () => { if (bet < 10 || bet > 200) { this.toast(a.id, 'Mise entre 10 et 200 🪙'); return false; } if (bet > p.coins) { this.toast(a.id, 'Pas assez de pièces'); return false; } return true; };
       const res = o => { this.pushProf(p); this.toUser(a.id, { t: 'mgCasino', ...o, coins: p.coins }); };
-      if (m.a === 'slots') { if (!okBet()) return; p.cas.n++; p.coins -= bet;
+      if (m.a === 'slots') { if (!okBet()) return; this.played('slot'); p.cas.n++; p.coins -= bet;
         const tot = SLOT.reduce((s, x) => s + x[1], 0); const pick = () => { let r = Math.random() * tot; for (const x of SLOT) { if ((r -= x[1]) < 0) return x; } return SLOT[0]; };
         const reels = [pick(), pick(), pick()]; let win = 0;
         if (reels[0][0] === reels[1][0] && reels[1][0] === reels[2][0]) win = bet * reels[0][2]; else if (reels.filter(x => x[0] === '🍒').length === 2) win = bet * 3;
         p.coins += win; if (win >= bet * 25) { this.log('info', p.name, `fait sauter la machine à sous : +${win} 🪙 🎰`, 'arcade'); }
         return res({ k: 'slots', reels: reels.map(x => x[0]), win, bet }); }
       if (m.a === 'roulette') { if (!okBet()) return; const on = String(m.on || ''); const num = /^\d+$/.test(on) ? +on : null; if (!['rouge', 'noir', 'pair', 'impair'].includes(on) && !(num !== null && num >= 0 && num <= 36)) return;
-        p.cas.n++; p.coins -= bet; const n = rnd(37); let win = 0;
+        this.played('roul'); p.cas.n++; p.coins -= bet; const n = rnd(37); let win = 0;
         if (num !== null) { if (n === num) win = bet * 36; } else if (n !== 0) { if ((on === 'rouge' && RED.has(n)) || (on === 'noir' && !RED.has(n)) || (on === 'pair' && n % 2 === 0) || (on === 'impair' && n % 2 === 1)) win = bet * 2; }
         p.coins += win; if (win >= bet * 36) this.log('info', p.name, `touche le ${n} à la roulette : +${win} 🪙 🎡`, 'arcade');
         return res({ k: 'roulette', n, red: RED.has(n), win, bet }); }
       const M = this.MG(); let h = M.bj[p.id];
-      if (m.a === 'deal') { if (h && !h.done) return res({ k: 'bj', ...this.bjView(h) }); if (!okBet()) return; p.cas.n++; p.coins -= bet;
+      if (m.a === 'deal') { if (h && !h.done) return res({ k: 'bj', ...this.bjView(h) }); if (!okBet()) return; this.played('bj'); p.cas.n++; p.coins -= bet;
         h = M.bj[p.id] = { bet, me: [CARD(), CARD()], dl: [CARD(), CARD()], done: false };
         if (handVal(h.me) === 21) return this.bjEnd(p, h, res); return res({ k: 'bj', ...this.bjView(h) }); }
       if (!h || h.done) return;
@@ -237,7 +238,7 @@ export function installMinigames(House) {
       if (m.a === 'see' && s.st === 'night' && me.role === 'voyante' && !s.seerDone && m.to !== p.id) { s.seerDone = true; me.seen = me.seen || {}; me.seen[m.to] = to.role; this.lgSendTo(p.id); return this.lgCheckNight(s); }
       if (m.a === 'vote' && s.st === 'vote') { s.votes[p.id] = m.to; this.lgB(); if (s.order.filter(id => s.pl[id].alive).every(id => s.votes[id])) this.lgEndVote(s); }
     },
-    lgStart(s) {
+    lgStart(s) { this.played('lg', s.order.length);
       const n = s.order.length, roles = []; const wolves = n >= 15 ? 3 : n >= 8 ? 2 : 1; for (let i = 0; i < wolves; i++) roles.push('loup'); roles.push('voyante'); while (roles.length < n) roles.push('villageois');
       shuffle(roles).forEach((r, i) => { s.pl[s.order[i]].role = r; });
       s.log.push(`🎭 Les rôles sont distribués : ${wolves} loup${wolves > 1 ? 's' : ''}, 1 voyante, ${n - wolves - 1} villageois.`); this.lgNight(s);
@@ -275,7 +276,7 @@ export function installMinigames(House) {
       if (m.a === 'train') { if (Date.now() - (pet.tr || 0) < 30 * 60e3) return this.toast(a.id, `${pet.name} se repose (entraînement toutes les 30 min)`); if (p.coins < 15) return this.toast(a.id, 'Il faut 15 🪙');
         p.coins -= 15; pet.tr = Date.now(); const l0 = petLvl(pet.xp); pet.xp += 30; const l1 = petLvl(pet.xp); this.pushProf(p); this.toUser(a.id, { t: 'mgPet', k: 'train', lvl: l1, xp: pet.xp, up: l1 > l0 });
         if (l1 > l0) this.log('info', p.name, `${PETS_E(pet)} ${pet.name} passe niveau ${l1} !`); return; }
-      if (m.a === 'fight') {
+      if (m.a === 'fight') { this.played('pet', 2);
         const q = this.profiles[m.to]; if (!q || q.id === p.id || !q.pet) return this.toast(a.id, 'Choisis un adversaire qui a un animal'); if (this.limited(p.id, 'petfight', 90e3)) return this.toast(a.id, 'Ton animal reprend son souffle (1 combat toutes les 90 s)');
         const mk = (o) => { const b = PET_STATS[o.pet.k] || [34, 7, 4], l = petLvl(o.pet.xp), k = SHINY_BONUS[o.pet.sh || ''] || 1; return { n: o.pet.name, e: PETS_E(o.pet), hp: Math.round((b[0] + l * 6) * k), atk: Math.round((b[1] + l * 2) * k), def: b[2] + l, l }; };
         const A = mk(p), B = mk(q); const log = []; let turn = Math.random() < .5 ? 0 : 1; const F = [A, B];
