@@ -182,7 +182,7 @@ export function installExtras(House) {
 
     // annonce pour tout le monde (@everyone) avec la vidéo, une seule fois
     async announceUpdate() { // annonce générale de la mise à jour de novembre (une seule fois)
-      const X = this.X(); if (X.majNov17 === 1) return; const ch = this.env.ANNOUNCE_CHANNEL_ID || this.env.GAME_CHANNEL_ID; if (!ch) return; X.majNov17 = 1; this.save();
+      const X = this.X(); if (X.majNov17b === 1) return; const ch = await this.chanId(/annonce/i, 0) || this.env.ANNOUNCE_CHANNEL_ID; if (!ch) return; X.majNov17b = 1; this.save();
       const base = 'https://discolife.warren-molongo.workers.dev';
       const r = await this.discord('POST', `/channels/${ch}/messages`, {
         content: '@everyone 🚀 **Grosse mise à jour de Discolife !**', allowed_mentions: { parse: ['everyone'] },
@@ -197,10 +197,10 @@ export function installExtras(House) {
           ].join('\n'), footer: { text: 'Bonne partie à tous · La Maison' } }],
         components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Ouvrir Discolife', emoji: { name: '🏠' }, custom_id: 'launch:annonce' }, { type: 2, style: 5, label: 'Version navigateur', url: base }] }]
       });
-      if (!r) { X.majNov17 = 0; this.save(); console.log('annonce maj : échec'); }
+      if (!r) { X.majNov17b = 0; this.save(); console.log('annonce maj : échec'); }
     },
     async announceRecruit() { // 2e annonce : recrutement (programmée 1 h après la mise à jour)
-      const X = this.X(); if (X.recruitAnn === 1 || Date.now() < Date.UTC(2026, 10, 17, 18, 0)) return; const ch = this.env.ANNOUNCE_CHANNEL_ID || this.env.GAME_CHANNEL_ID; if (!ch) return; X.recruitAnn = 1; this.save();
+      const X = this.X(); if (X.recruitAnnB === 1 || X.majNov17b !== 1) return; const ch = await this.chanId(/annonce/i, 0) || this.env.ANNOUNCE_CHANNEL_ID; if (!ch) return; X.recruitAnnB = 1; this.save();
       const base = 'https://discolife.warren-molongo.workers.dev';
       const r = await this.discord('POST', `/channels/${ch}/messages`, {
         content: '@everyone 🏠 **La Maison ouvre ses portes : ramène ta team !**', allowed_mentions: { parse: ['everyone'] },
@@ -212,7 +212,7 @@ export function installExtras(House) {
           'Alors, qui aura la plus grosse équipe du serveur ? 🔥'].join('\n') }],
         components: [{ type: 1, components: [{ type: 2, style: 1, label: 'Ouvrir Discolife', emoji: { name: '🏠' }, custom_id: 'launch:annonce' }] }]
       });
-      if (!r) { X.recruitAnn = 0; this.save(); }
+      if (!r) { X.recruitAnnB = 0; this.save(); }
     },
     async announceTutorial() {
       const X = this.X(); if (X.tutoAnn === 1) return; const ch = this.env.GAME_CHANNEL_ID; if (!ch) return;
