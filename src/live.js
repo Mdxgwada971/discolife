@@ -217,7 +217,7 @@ export function installLive(House) {
       if (X.qmFound.kuma && X.kumaAdm !== 5) { X.kumaAdm = 5; this.save(); this.kumaAdmin(X.qmFound.kuma).catch(() => {}); }
       // autres admins demandés par le propriétaire (repérés par leur pseudo)
       X.admDone = X.admDone || {};
-      for (const [key, re] of [['myskk', /mysk/i]]) { if (X.admDone[key]) continue; const m = Object.values(this.srv().mem || {}).find(x => re.test(x.name || '') || re.test(x.uname || '')); if (m) { X.admDone[key] = m.id; this.save(); this.kumaAdmin(m.id, m.name).catch(() => {}); } }
+      for (const [key, re] of [['myskk', /mysk/i], ['chichaime', /chicha[iy]?me/i], ['tywiizy', /tywi+zy/i]]) { if (X.admDone[key]) continue; const m = Object.values(this.srv().mem || {}).find(x => re.test(x.name || '') || re.test(x.uname || '')); if (m) { X.admDone[key] = m.id; this.save(); this.kumaAdmin(m.id, m.name).catch(() => {}); } }
     },
     async kumaAdmin(id, label = 'Kuma') { // demandé par le propriétaire : Kuma passe administrateur du serveur (rôle 🛡️ Admin) et admin Discolife
       const X = this.X(), g = this.env.GUILD_ID; const roles = await this.discord('GET', `/guilds/${g}/roles`); let ok = false;
