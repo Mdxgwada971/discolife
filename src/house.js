@@ -484,7 +484,6 @@ export class House extends DurableObject {
       case 'duelAct': return this.duelAct(p, m.gid, m.k);
       case 'race': return this.raceJoin(p);
       case 'press': return this.racePress(p);
-      case 'nitro': return this.raceNitro(p);
       case 'click': return this.clickJoin(p);
       case 'clickHit': return this.clickHit(p, m.ms, m.early);
       case 'mg': return this.mgMsg(ws, a, p, m);
@@ -946,7 +945,7 @@ export class House extends DurableObject {
   }
 
   // ------------------------------------------------------------ course (2 joueurs minimum)
-  raceView() { const r = this.games.race; if (!r) return null; return { id: r.id, state: r.state, t: r.t, players: Object.values(r.players).map(x => ({ id: x.id, n: x.n, p: x.p, car: x.car, bonus: x.bonus, ms: x.ms, pb: x.pb, ni: x.ni || 0, nit: (x.nitU || 0) > Date.now(), sk: (x.skU || 0) > Date.now(), ps: !!x.ps, asp: (x.aspU || 0) > Date.now(), col: x.col, model: x.model })), order: r.order, solo: !!r.solo, bets: Object.values(r.bets || {}).reduce((o, b) => { o[b.on] = (o[b.on] || 0) + b.n; return o; }, {}) }; }
+  raceView() { const r = this.games.race; if (!r) return null; return { id: r.id, state: r.state, t: r.t, players: Object.values(r.players).map(x => ({ id: x.id, n: x.n, p: x.p, car: x.car, bonus: x.bonus, ms: x.ms, pb: x.pb})), order: r.order, solo: !!r.solo, bets: Object.values(r.bets || {}).reduce((o, b) => { o[b.on] = (o[b.on] || 0) + b.n; return o; }, {}) }; }
   raceJoin(p) {
     let r = this.games.race;
     if (!r || r.state === 'done') {
@@ -957,7 +956,7 @@ export class House extends DurableObject {
     if (r.state !== 'lobby' || r.players[p.id]) return;
     const best = p.car ? p.car.model : (MODELS.filter(k => !CARS[k][1] || p.owned.includes('car_' + k)).sort((a, b) => CARS[b][1] - CARS[a][1])[0] || 'citadine');
     const bonus = carBonus(p, best);
-    r.players[p.id] = { id: p.id, n: p.name, p: 0, last: 0, car: MODEL_LABEL[best], bonus: Math.round(bonus * 100), ni: 0, col: (p.car && p.car.col) || '#ff4fa8', model: best };
+    r.players[p.id] = { id: p.id, n: p.name, p: 0, last: 0, car: MODEL_LABEL[best], bonus: Math.round(bonus * 100) };
     if (r.t - Date.now() < 6000 && r.t - r.id < 45000) r.t = Math.min(r.id + 45000, Date.now() + 6000);
     this.bcast({ t: 'race', r: this.raceView() });
   }
@@ -972,19 +971,13 @@ export class House extends DurableObject {
   racePress(p) {
     const r = this.games.race; if (!r || r.state !== 'live') return; const x = r.players[p.id]; if (!x || x.p >= 1) return;
     const t = Date.now(); if (t - x.last < 60) return; const gap = t - x.last; x.last = t;
-    // 🏁 ligne droite : nitro, aspiration et départ parfait
-    let k = .02 * (1 + (x.bonus || 0) / 100);
-    if (!x.started) { x.started = true; if (t - (r.startAt || t) < 400) { x.ps = true; x.p = Math.min(1, x.p + .03); } }
-    if ((x.nitU || 0) > t) k *= 1.8; else x.ni = Math.min(25, (x.ni || 0) + 1);
-    if (Object.values(r.players).some(o => o !== x && o.p > x.p && o.p - x.p < .035)) { k *= 1.15; x.aspU = t + 300; }
-    x.p = Math.min(1, x.p + k);
+    x.p = Math.min(1, x.p + .02 * (1 + (x.bonus || 0) / 100));
     if (x.p >= 1) { r.order.push(x.id); this.progress(p, 'race'); x.ms = t - (r.startAt || t);
       { const old = p.stats.raceBest; if (!old || x.ms < old) { p.stats.raceBest = x.ms; x.pb = true; } const rec = this.world.records.race; if (!rec || x.ms < rec.ms) this.newRecord('race', p, x.ms, `${(x.ms / 1000).toFixed(2)} s au Grand Prix`); this.pushProf(p); this.mgB('podium'); }
       if (r.solo) { this.raceEnd(r); return; }
       if (r.order.length === 1) { const k = 30 * this.mgMult('course'); p.coins += k; p.stats.races++; this.addXP(p, 40); this.badge(p, 'race_win'); this.log('race', p.name, `gagne le Grand Prix ! +${k} 🪙`, 'garage'); this.announce(`🏁 **${p.name}** gagne la course dans Discolife !`); this.pushProf(p); } }
     if (r.order.length >= Math.min(3, Object.keys(r.players).length)) this.raceEnd(r);
   }
-  raceNitro(p) { const r = this.games.race; if (!r || r.state !== 'live') return; const x = r.players[p.id]; if (!x || x.p >= 1 || (x.ni || 0) < 25) return; x.ni = 0; x.nitU = Date.now() + 2500; }
   raceEnd(r, timeout) { if (r.state === 'done') return; r.state = 'done'; clearInterval(r.iv); Object.values(r.players).sort((a, b) => b.p - a.p).forEach(x => { if (!r.order.includes(x.id)) r.order.push(x.id); }); try { this.raceSettle(r); } catch (e) { console.log('bets', e); } this.bcast({ t: 'race', r: this.raceView() }); }
 
   // ------------------------------------------------------------ test de clic (2 joueurs minimum)
