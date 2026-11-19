@@ -946,7 +946,7 @@ export class House extends DurableObject {
   }
 
   // ------------------------------------------------------------ course (2 joueurs minimum)
-  raceView() { const r = this.games.race; if (!r) return null; return { id: r.id, state: r.state, t: r.t, players: Object.values(r.players).map(x => ({ id: x.id, n: x.n, p: x.p, car: x.car, bonus: x.bonus, ms: x.ms, pb: x.pb, ni: x.ni || 0, nit: (x.nitU || 0) > Date.now(), sk: (x.skU || 0) > Date.now(), ps: !!x.ps, asp: (x.aspU || 0) > Date.now(), col: x.col, model: x.model })), laps: 3, order: r.order, solo: !!r.solo, bets: Object.values(r.bets || {}).reduce((o, b) => { o[b.on] = (o[b.on] || 0) + b.n; return o; }, {}) }; }
+  raceView() { const r = this.games.race; if (!r) return null; return { id: r.id, state: r.state, t: r.t, players: Object.values(r.players).map(x => ({ id: x.id, n: x.n, p: x.p, car: x.car, bonus: x.bonus, ms: x.ms, pb: x.pb, ni: x.ni || 0, nit: (x.nitU || 0) > Date.now(), sk: (x.skU || 0) > Date.now(), ps: !!x.ps, asp: (x.aspU || 0) > Date.now(), col: x.col, model: x.model })), order: r.order, solo: !!r.solo, bets: Object.values(r.bets || {}).reduce((o, b) => { o[b.on] = (o[b.on] || 0) + b.n; return o; }, {}) }; }
   raceJoin(p) {
     let r = this.games.race;
     if (!r || r.state === 'done') {
@@ -972,11 +972,9 @@ export class House extends DurableObject {
   racePress(p) {
     const r = this.games.race; if (!r || r.state !== 'live') return; const x = r.players[p.id]; if (!x || x.p >= 1) return;
     const t = Date.now(); if (t - x.last < 60) return; const gap = t - x.last; x.last = t;
-    // 🏁 circuit de 3 tours : chaque tour a 2 virages ; taper trop vite dans un virage = dérapage (gain réduit)
-    const f = (x.p * 3) % 1, corner = (f > .2 && f < .45) || (f > .7 && f < .95);
+    // 🏁 ligne droite : nitro, aspiration et départ parfait
     let k = .02 * (1 + (x.bonus || 0) / 100);
     if (!x.started) { x.started = true; if (t - (r.startAt || t) < 400) { x.ps = true; x.p = Math.min(1, x.p + .03); } }
-    if (corner && gap < 125) { k *= .45; x.skU = t + 400; }
     if ((x.nitU || 0) > t) k *= 1.8; else x.ni = Math.min(25, (x.ni || 0) + 1);
     if (Object.values(r.players).some(o => o !== x && o.p > x.p && o.p - x.p < .035)) { k *= 1.15; x.aspU = t + 300; }
     x.p = Math.min(1, x.p + k);
